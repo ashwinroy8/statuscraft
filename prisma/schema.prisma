@@ -1,0 +1,284 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Plan {
+  FREE
+  PRO
+  BUSINESS
+}
+
+enum PostType {
+  PRODUCT
+  TREND
+  QUIZ
+  POLL
+  MEME
+  EVENT
+  EDUCATIONAL
+  STORY
+}
+
+enum PostStatus {
+  DRAFT
+  SCHEDULED
+  SENT
+  FAILED
+}
+
+enum Tonality {
+  WITTY
+  PREMIUM
+  INFORMATIVE
+  EMOTIONAL
+  URGENT
+  PLAYFUL
+}
+
+enum CampaignType {
+  QUIZ
+  MEME
+  POLL
+  PRODUCT_SPOTLIGHT
+  THIS_OR_THAT
+  BTS
+  EDUCATIONAL_SERIES
+}
+
+enum CampaignFrequency {
+  DAILY
+  WEEKLY
+  BIWEEKLY
+  CUSTOM
+}
+
+enum SignalType {
+  TRENDING
+  EVENT
+  WEATHER
+  SPORTS
+  NEWS
+  CULTURAL
+  HOLIDAY
+}
+
+enum TemplateType {
+  IMAGE
+  VIDEO
+  CAROUSEL
+}
+
+enum TemplateCategory {
+  PRODUCT
+  QUOTE
+  QUIZ
+  ANNOUNCEMENT
+  MEME
+  TESTIMONIAL
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String?
+  phone     String?  @unique
+  avatarUrl String?
+  plan      Plan     @default(FREE)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  brands   Brand[]
+  settings Settings?
+
+  @@index([email])
+}
+
+model Brand {
+  id          String  @id @default(uuid())
+  userId      String
+  name        String
+  category    String
+  subcategory String?
+
+  websiteUrl  String?
+  description String?
+  tagline     String?
+
+  targetAudience   Json?
+  usp              String?
+  competitors      String[]
+  voicePersonality Json?
+  colors           Json?
+  fonts            Json?
+  logoUrl          String?
+  brandImagesUrls  String[]
+
+  onboardingCompleted Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  posts     Post[]
+  campaigns Campaign[]
+  brochures Brochure[]
+  templates Template[]
+
+  @@index([userId])
+}
+
+model Brochure {
+  id                String    @id @default(uuid())
+  brandId           String
+  fileName          String
+  fileUrl           String
+  fileType          String
+  extractedText     String?
+  extractedProducts Json?
+  processedAt       DateTime?
+  createdAt         DateTime  @default(now())
+
+  brand Brand @relation(fields: [brandId], references: [id], onDelete: Cascade)
+
+  @@index([brandId])
+}
+
+model Post {
+  id         String  @id @default(uuid())
+  brandId    String
+  campaignId String?
+  signalId   String?
+
+  type     PostType
+  status   PostStatus @default(DRAFT)
+  tonality Tonality   @default(INFORMATIVE)
+
+  scheduledAt DateTime?
+  sentAt      DateTime?
+
+  headline  String?
+  bodyText  String?
+  ctaText   String?
+
+  imageUrl   String?
+  videoUrl   String?
+  templateId String?
+
+  signalSource Json?
+  aiReasoning  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  brand     Brand          @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  campaign  Campaign?      @relation(fields: [campaignId], references: [id])
+  signal    Signal?        @relation(fields: [signalId], references: [id])
+  analytics PostAnalytics?
+
+  @@index([brandId])
+  @@index([campaignId])
+  @@index([status])
+  @@index([scheduledAt])
+}
+
+model PostAnalytics {
+  id             String   @id @default(uuid())
+  postId         String   @unique
+  views          Int      @default(0)
+  replies        Int      @default(0)
+  screenshots    Int      @default(0)
+  forwards       Int      @default(0)
+  engagementRate Float    @default(0)
+  aiScore        Int      @default(0)
+  responseTexts  Json?
+  fetchedAt      DateTime @default(now())
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+}
+
+model Campaign {
+  id          String  @id @default(uuid())
+  brandId     String
+  name        String
+  description String?
+
+  type           CampaignType
+  frequency      CampaignFrequency @default(WEEKLY)
+  cronExpression String?
+  tonality       Tonality          @default(WITTY)
+  isActive       Boolean           @default(true)
+
+  engagementLift Float @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  brand Brand  @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  posts Post[]
+
+  @@index([brandId])
+  @@index([isActive])
+}
+
+model Signal {
+  id             String     @id @default(uuid())
+  type           SignalType
+  title          String
+  description    String?
+  relevanceScore Int        @default(0)
+  sourceUrl      String?
+  detectedAt     DateTime   @default(now())
+  expiresAt      DateTime?
+  metadata       Json?
+
+  usedInPosts Post[]
+
+  @@index([type])
+  @@index([relevanceScore])
+  @@index([expiresAt])
+}
+
+model Template {
+  id       String           @id @default(uuid())
+  brandId  String?
+  name     String
+  type     TemplateType
+  category TemplateCategory
+
+  canvasWidth  Int @default(1080)
+  canvasHeight Int @default(1920)
+
+  layers     Json
+  previewUrl String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  brand Brand? @relation(fields: [brandId], references: [id], onDelete: SetNull)
+
+  @@index([brandId])
+  @@index([category])
+}
+
+model Settings {
+  id     String @id @default(uuid())
+  userId String @unique
+
+  timezone           String  @default("Asia/Kolkata")
+  preferredPostTimes Json    @default("[\"08:00\", \"12:00\", \"18:00\"]")
+  autoApprove        Boolean @default(false)
+  maxPostsPerDay     Int     @default(3)
+
+  whatsappConnected       Boolean @default(false)
+  whatsappBusinessPhoneId String?
+  notificationPreferences Json    @default("{\"email\": true, \"push\": true, \"whatsapp\": false}")
+
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
