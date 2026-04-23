@@ -29,7 +29,7 @@ export default async function AdminPage() {
             take: 20,
             select: {
               id: true,
-              title: true,
+              headline: true,
               type: true,
               status: true,
               createdAt: true,

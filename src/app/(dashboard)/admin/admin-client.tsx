@@ -18,7 +18,7 @@ import { format } from "date-fns";
 
 interface Post {
   id: string;
-  title: string;
+  headline: string | null;
   type: string;
   status: string;
   createdAt: string;
@@ -255,7 +255,7 @@ export default function AdminClient({ users, stats }: Props) {
                             key={post.id}
                             className="grid grid-cols-[1fr_120px_100px_140px] gap-4 px-4 py-3 border-b border-white/[0.03] last:border-0 hover:bg-white/[0.02] transition-colors"
                           >
-                            <p className="text-xs text-[#f0f0f2] truncate">{post.title}</p>
+                            <p className="text-xs text-[#f0f0f2] truncate">{post.headline ?? "Untitled"}</p>
                             <span className={`text-xs font-semibold ${TYPE_COLORS[post.type] ?? "text-[#8b8b9a]"}`}>
                               {post.type}
                             </span>
