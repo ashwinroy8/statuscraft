@@ -25,8 +25,9 @@ export const brandRouter = createTRPCRouter({
     .input(
       z.object({
         name: z.string().min(1),
-        category: z.string().min(1),
+        category: z.string().optional(),
         subcategory: z.string().optional(),
+        tagline: z.string().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -46,6 +47,7 @@ export const brandRouter = createTRPCRouter({
           name: input.name,
           category: input.category,
           subcategory: input.subcategory,
+          tagline: input.tagline,
         },
       });
     }),
@@ -60,6 +62,8 @@ export const brandRouter = createTRPCRouter({
         websiteUrl: z.string().optional(),
         description: z.string().optional(),
         tagline: z.string().optional(),
+        ctaPhone: z.string().optional(),
+        ctaType: z.string().optional(),
         targetAudience: z.any().optional(),
         usp: z.string().optional(),
         competitors: z.array(z.string()).optional(),

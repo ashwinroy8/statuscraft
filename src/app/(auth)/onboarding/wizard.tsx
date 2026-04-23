@@ -18,6 +18,7 @@ import {
   Loader2,
   Upload,
   Zap,
+  Phone,
 } from "lucide-react";
 
 const STEPS = [
@@ -139,6 +140,8 @@ const POST_TIMES = [
   "21:00",
 ];
 
+type CtaType = "PHONE" | "WEBSITE" | "BOTH" | "NONE";
+
 interface WizardProps {
   userId: string;
   email: string;
@@ -152,18 +155,25 @@ export default function OnboardingWizard({ userId, email }: WizardProps) {
 
   // Step 1
   const [businessName, setBusinessName] = useState("");
+  const [taglineInput, setTaglineInput] = useState("");
   const [category, setCategory] = useState("");
   const [subcategory, setSubcategory] = useState("");
+  const [ctaType, setCtaType] = useState<CtaType>("NONE");
+  const [ctaPhone, setCtaPhone] = useState("");
+  const [ctaWebsite, setCtaWebsite] = useState("");
 
   // Step 2
   const [brochureFile, setBrochureFile] = useState<File | null>(null);
   const [brochureProcessing, setBrochureProcessing] = useState(false);
 
-  // Step 3
+  // Step 3 — websiteUrl kept in sync with ctaWebsite from step 1
   const [websiteUrl, setWebsiteUrl] = useState("");
   const [websiteScraping, setWebsiteScraping] = useState(false);
 
   // Step 4
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoUploading, setLogoUploading] = useState(false);
+  const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(null);
   const [brandImages, setBrandImages] = useState<File[]>([]);
 
   // Step 5 — AI generated brand profile
@@ -182,10 +192,22 @@ export default function OnboardingWizard({ userId, email }: WizardProps) {
     try {
       const brand = await createBrand.mutateAsync({
         name: businessName,
-        category,
+        category: category || undefined,
         subcategory: subcategory || undefined,
+        tagline: taglineInput || undefined,
       });
       setBrandId(brand.id);
+
+      // If ctaType is not NONE, or there's a phone/website entered, persist them now
+      if (ctaType !== "NONE" || ctaPhone || ctaWebsite) {
+        await updateBrand.mutateAsync({
+          id: brand.id,
+          ctaType,
+          ctaPhone: ctaPhone || undefined,
+          websiteUrl: ctaWebsite || undefined,
+        });
+      }
+
       setStep(2);
     } catch (e) {
       console.error(e);
@@ -236,6 +258,29 @@ export default function OnboardingWizard({ userId, email }: WizardProps) {
   async function handleStep4() {
     if (!brandId) return;
     setLoading(true);
+
+    // Upload logo first if selected
+    if (logoFile) {
+      setLogoUploading(true);
+      try {
+        const formData = new FormData();
+        formData.append("logo", logoFile);
+        formData.append("brandId", brandId);
+        const res = await fetch("/api/onboarding/upload-logo", {
+          method: "POST",
+          body: formData,
+        });
+        const data = await res.json();
+        if (data.url) {
+          setLogoPreviewUrl(data.url);
+        }
+      } catch (e) {
+        console.error(e);
+      }
+      setLogoUploading(false);
+    }
+
+    // Then upload brand images
     if (brandImages.length > 0) {
       const formData = new FormData();
       brandImages.forEach((img) => formData.append("images", img));
@@ -245,6 +290,7 @@ export default function OnboardingWizard({ userId, email }: WizardProps) {
         body: formData,
       });
     }
+
     setLoading(false);
     // Generate AI brand profile
     setStep(5);
@@ -306,6 +352,18 @@ export default function OnboardingWizard({ userId, email }: WizardProps) {
     });
     setLoading(false);
     router.push("/");
+  }
+
+  // When ctaWebsite changes in Step 1, keep websiteUrl in sync
+  function handleCtaWebsiteChange(val: string) {
+    setCtaWebsite(val);
+    setWebsiteUrl(val);
+  }
+
+  // When websiteUrl changes in Step 3, keep ctaWebsite in sync
+  function handleWebsiteUrlChange(val: string) {
+    setWebsiteUrl(val);
+    setCtaWebsite(val);
   }
 
   const progress = ((step - 1) / (STEPS.length - 1)) * 100;
@@ -391,6 +449,7 @@ export default function OnboardingWizard({ userId, email }: WizardProps) {
                 This helps our AI understand your brand from day one
               </p>
               <div className="space-y-4">
+                {/* Business Name */}
                 <div>
                   <label className="block text-sm font-medium mb-2">
                     Business Name *
@@ -403,9 +462,26 @@ export default function OnboardingWizard({ userId, email }: WizardProps) {
                     className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm outline-none focus:border-[#25D366]/50 transition-colors"
                   />
                 </div>
+
+                {/* Short Description (tagline) */}
                 <div>
                   <label className="block text-sm font-medium mb-2">
-                    Category *
+                    What does your business do? *
+                  </label>
+                  <textarea
+                    value={taglineInput}
+                    onChange={(e) => setTaglineInput(e.target.value)}
+                    placeholder="e.g. We make the best masala chai in Pune, served fresh every morning"
+                    rows={2}
+                    className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm outline-none focus:border-[#25D366]/50 transition-colors resize-none"
+                  />
+                </div>
+
+                {/* Category (optional) */}
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    Category{" "}
+                    <span className="text-[#555562] font-normal">(optional)</span>
                   </label>
                   <select
                     value={category}
@@ -420,10 +496,12 @@ export default function OnboardingWizard({ userId, email }: WizardProps) {
                     ))}
                   </select>
                 </div>
+
+                {/* Subcategory (optional) */}
                 <div>
                   <label className="block text-sm font-medium mb-2">
                     Subcategory{" "}
-                    <span className="text-[#555562]">(optional)</span>
+                    <span className="text-[#555562] font-normal">(optional)</span>
                   </label>
                   <input
                     type="text"
@@ -433,11 +511,73 @@ export default function OnboardingWizard({ userId, email }: WizardProps) {
                     className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm outline-none focus:border-[#25D366]/50 transition-colors"
                   />
                 </div>
+
+                {/* CTA Contact Footer */}
+                <div className="border border-white/[0.06] rounded-xl p-4 space-y-3">
+                  <div>
+                    <p className="text-sm font-medium">
+                      What should customers see at the bottom of every image?{" "}
+                      <span className="text-[#555562] font-normal">(optional)</span>
+                    </p>
+                    <p className="text-xs text-[#555562] mt-0.5">
+                      Your contact details will appear as a footer on every post image
+                    </p>
+                  </div>
+
+                  {/* Radio buttons for CTA type */}
+                  <div className="flex gap-2 flex-wrap">
+                    {(["NONE", "PHONE", "WEBSITE", "BOTH"] as CtaType[]).map((type) => (
+                      <button
+                        key={type}
+                        type="button"
+                        onClick={() => setCtaType(type)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+                          ctaType === type
+                            ? "bg-[#25D366]/10 border-[#25D366] text-[#25D366]"
+                            : "bg-white/[0.03] border-white/[0.08] text-[#8b8b9a] hover:border-white/20"
+                        }`}
+                      >
+                        {type === "NONE" && "None"}
+                        {type === "PHONE" && "📞 Phone Number"}
+                        {type === "WEBSITE" && "🌐 Website"}
+                        {type === "BOTH" && "Both"}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Conditional inputs */}
+                  {(ctaType === "PHONE" || ctaType === "BOTH") && (
+                    <div>
+                      <label className="block text-xs text-[#8b8b9a] mb-1">Phone Number</label>
+                      <input
+                        type="tel"
+                        value={ctaPhone}
+                        onChange={(e) => setCtaPhone(e.target.value)}
+                        placeholder="e.g. +91 98765 43210"
+                        className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-2.5 text-sm outline-none focus:border-[#25D366]/50 transition-colors"
+                      />
+                    </div>
+                  )}
+
+                  {(ctaType === "WEBSITE" || ctaType === "BOTH") && (
+                    <div>
+                      <label className="block text-xs text-[#8b8b9a] mb-1">Website URL</label>
+                      <input
+                        type="url"
+                        value={ctaWebsite}
+                        onChange={(e) => handleCtaWebsiteChange(e.target.value)}
+                        placeholder="https://yourshop.com"
+                        className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-2.5 text-sm outline-none focus:border-[#25D366]/50 transition-colors"
+                      />
+                    </div>
+                  )}
+                </div>
               </div>
+
               <div className="mt-8 flex justify-end">
                 <button
                   onClick={handleStep1}
-                  disabled={!businessName || !category || loading}
+                  disabled={!businessName || !taglineInput || loading}
                   className="flex items-center gap-2 bg-[#25D366] hover:bg-[#1aab52] text-black font-semibold px-6 py-3 rounded-xl text-sm transition-colors disabled:opacity-40"
                 >
                   {loading ? (
@@ -536,7 +676,7 @@ export default function OnboardingWizard({ userId, email }: WizardProps) {
                 <input
                   type="url"
                   value={websiteUrl}
-                  onChange={(e) => setWebsiteUrl(e.target.value)}
+                  onChange={(e) => handleWebsiteUrlChange(e.target.value)}
                   placeholder="https://yourshop.com"
                   className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm outline-none focus:border-[#25D366]/50 transition-colors"
                 />
@@ -571,7 +711,7 @@ export default function OnboardingWizard({ userId, email }: WizardProps) {
             </motion.div>
           )}
 
-          {/* STEP 4: Brand Images */}
+          {/* STEP 4: Logo & Brand Images */}
           {step === 4 && (
             <motion.div
               key="step4"
@@ -580,38 +720,89 @@ export default function OnboardingWizard({ userId, email }: WizardProps) {
               exit={{ opacity: 0, x: -20 }}
               className="p-8"
             >
-              <h2 className="text-2xl font-bold mb-1">Upload brand images</h2>
+              <h2 className="text-2xl font-bold mb-1">Logo & Brand Images</h2>
               <p className="text-[#8b8b9a] text-sm mb-6">
-                Product photos, your logo, or any images that represent your
-                brand
+                Upload your logo and product photos to personalise every post
               </p>
-              <label className="block w-full border-2 border-dashed border-white/10 hover:border-[#25D366]/30 rounded-2xl p-10 text-center cursor-pointer transition-colors group">
-                <input
-                  type="file"
-                  className="hidden"
-                  accept="image/*"
-                  multiple
-                  onChange={(e) =>
-                    setBrandImages(Array.from(e.target.files ?? []))
-                  }
-                />
-                <Image className="w-10 h-10 text-[#555562] group-hover:text-[#25D366]/60 mx-auto mb-3 transition-colors" />
-                {brandImages.length > 0 ? (
-                  <p className="text-sm text-[#25D366]">
-                    {brandImages.length} image
-                    {brandImages.length > 1 ? "s" : ""} selected
-                  </p>
-                ) : (
-                  <>
-                    <p className="text-sm font-medium">
-                      Drop images here or click to browse
+
+              {/* Logo upload */}
+              <div className="mb-5">
+                <label className="block text-sm font-medium mb-2">
+                  Logo{" "}
+                  <span className="text-[#555562] font-normal">(optional)</span>
+                </label>
+                <label className="flex items-center gap-4 w-full border border-dashed border-white/10 hover:border-[#25D366]/30 rounded-xl p-4 cursor-pointer transition-colors group">
+                  <input
+                    type="file"
+                    className="hidden"
+                    accept="image/*"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0] ?? null;
+                      setLogoFile(file);
+                      if (file) {
+                        setLogoPreviewUrl(URL.createObjectURL(file));
+                      }
+                    }}
+                  />
+                  {logoPreviewUrl ? (
+                    <img
+                      src={logoPreviewUrl}
+                      alt="Logo preview"
+                      className="w-14 h-14 rounded-full object-cover border border-white/10 flex-shrink-0"
+                    />
+                  ) : (
+                    <div className="w-14 h-14 rounded-full bg-white/[0.04] border border-white/10 flex items-center justify-center flex-shrink-0">
+                      <Upload className="w-5 h-5 text-[#555562] group-hover:text-[#25D366]/60 transition-colors" />
+                    </div>
+                  )}
+                  <div>
+                    {logoFile ? (
+                      <p className="text-sm text-[#25D366]">{logoFile.name}</p>
+                    ) : (
+                      <>
+                        <p className="text-sm font-medium">Upload your logo</p>
+                        <p className="text-xs text-[#555562] mt-0.5">PNG, JPG up to 5MB — shown in top corner of every post</p>
+                      </>
+                    )}
+                  </div>
+                </label>
+              </div>
+
+              {/* Brand images upload */}
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  Brand Images{" "}
+                  <span className="text-[#555562] font-normal">(optional)</span>
+                </label>
+                <label className="block w-full border-2 border-dashed border-white/10 hover:border-[#25D366]/30 rounded-2xl p-10 text-center cursor-pointer transition-colors group">
+                  <input
+                    type="file"
+                    className="hidden"
+                    accept="image/*"
+                    multiple
+                    onChange={(e) =>
+                      setBrandImages(Array.from(e.target.files ?? []))
+                    }
+                  />
+                  <Image className="w-10 h-10 text-[#555562] group-hover:text-[#25D366]/60 mx-auto mb-3 transition-colors" />
+                  {brandImages.length > 0 ? (
+                    <p className="text-sm text-[#25D366]">
+                      {brandImages.length} image
+                      {brandImages.length > 1 ? "s" : ""} selected
                     </p>
-                    <p className="text-xs text-[#555562] mt-1">
-                      PNG, JPG up to 5MB each
-                    </p>
-                  </>
-                )}
-              </label>
+                  ) : (
+                    <>
+                      <p className="text-sm font-medium">
+                        Drop images here or click to browse
+                      </p>
+                      <p className="text-xs text-[#555562] mt-1">
+                        PNG, JPG up to 5MB each
+                      </p>
+                    </>
+                  )}
+                </label>
+              </div>
+
               <div className="mt-8 flex justify-between">
                 <button
                   onClick={() => setStep(3)}
@@ -621,14 +812,14 @@ export default function OnboardingWizard({ userId, email }: WizardProps) {
                 </button>
                 <button
                   onClick={handleStep4}
-                  disabled={loading}
+                  disabled={loading || logoUploading}
                   className="flex items-center gap-2 bg-[#25D366] hover:bg-[#1aab52] text-black font-semibold px-6 py-3 rounded-xl text-sm transition-colors disabled:opacity-40"
                 >
-                  {loading ? (
+                  {loading || logoUploading ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
                   ) : (
                     <>
-                      {brandImages.length > 0 ? "Upload & Continue" : "Skip for now"}{" "}
+                      {logoFile || brandImages.length > 0 ? "Upload & Continue" : "Skip for now"}{" "}
                       <ArrowRight className="w-4 h-4" />
                     </>
                   )}

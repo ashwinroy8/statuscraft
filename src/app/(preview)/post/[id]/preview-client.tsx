@@ -121,6 +121,42 @@ export default function PostPreviewClient({ post: initialPost }: Props) {
       ctx.fillText(post.ctaText, 60, 1870);
     }
 
+    // Logo — circle at top-right
+    if (brand.logoUrl) {
+      const logo = new window.Image();
+      logo.crossOrigin = "anonymous";
+      logo.src = brand.logoUrl;
+      await new Promise((resolve) => { logo.onload = resolve; logo.onerror = resolve; });
+      const logoSize = 120;
+      const logoX = 1080 - logoSize - 40;
+      const logoY = 40;
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(logoX + logoSize / 2, logoY + logoSize / 2, logoSize / 2, 0, Math.PI * 2);
+      ctx.closePath();
+      ctx.clip();
+      ctx.drawImage(logo, logoX, logoY, logoSize, logoSize);
+      ctx.restore();
+    }
+
+    // CTA footer bar at bottom
+    const showPhone = (brand.ctaType === "PHONE" || brand.ctaType === "BOTH") && brand.ctaPhone;
+    const showWebsite = (brand.ctaType === "WEBSITE" || brand.ctaType === "BOTH") && brand.websiteUrl;
+    if (showPhone || showWebsite) {
+      ctx.fillStyle = "rgba(0,0,0,0.7)";
+      ctx.fillRect(0, 1860, 1080, 60);
+      ctx.font = "bold 32px Arial";
+      ctx.fillStyle = "#ffffff";
+      ctx.shadowBlur = 0;
+      const lines: string[] = [];
+      if (showPhone) lines.push("📞 " + brand.ctaPhone);
+      if (showWebsite) lines.push("🌐 " + brand.websiteUrl);
+      const ctaFooterText = lines.join("   |   ");
+      ctx.textAlign = "center";
+      ctx.fillText(ctaFooterText, 540, 1898);
+      ctx.textAlign = "left";
+    }
+
     canvas.toBlob((blob) => {
       if (!blob) return;
       const url = URL.createObjectURL(blob);
@@ -195,9 +231,41 @@ export default function PostPreviewClient({ post: initialPost }: Props) {
                 </div>
               )}
 
+              {/* Logo overlay — top-right corner */}
+              {brand.logoUrl && (
+                <div className="absolute top-3 right-3 z-20">
+                  <img
+                    src={brand.logoUrl}
+                    alt="Logo"
+                    className="w-10 h-10 rounded-full object-cover bg-white/10 border border-white/20 shadow-lg"
+                  />
+                </div>
+              )}
+
+              {/* CTA footer bar — absolute bottom */}
+              {brand.ctaType && brand.ctaType !== "NONE" && (
+                <div className="absolute bottom-0 left-0 right-0 z-20 bg-black/60 backdrop-blur-sm flex items-center justify-center gap-3 px-3" style={{ height: "28px" }}>
+                  {(brand.ctaType === "PHONE" || brand.ctaType === "BOTH") && brand.ctaPhone && (
+                    <span className="text-white text-[9px] font-medium truncate">
+                      📞 {brand.ctaPhone}
+                    </span>
+                  )}
+                  {brand.ctaType === "BOTH" && brand.ctaPhone && brand.websiteUrl && (
+                    <span className="text-white/40 text-[9px]">|</span>
+                  )}
+                  {(brand.ctaType === "WEBSITE" || brand.ctaType === "BOTH") && brand.websiteUrl && (
+                    <span className="text-white text-[9px] font-medium truncate">
+                      🌐 {brand.websiteUrl}
+                    </span>
+                  )}
+                </div>
+              )}
+
               {/* Text overlay on top of image */}
               {post.imageUrl && post.headline && (
-                <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/90 via-black/50 to-transparent">
+                <div className="absolute left-0 right-0 p-4 bg-gradient-to-t from-black/90 via-black/50 to-transparent"
+                  style={{ bottom: brand.ctaType && brand.ctaType !== "NONE" ? "28px" : "0px" }}
+                >
                   <p className="text-white font-bold text-sm leading-tight mb-1 drop-shadow-lg">
                     {post.headline}
                   </p>
@@ -209,7 +277,10 @@ export default function PostPreviewClient({ post: initialPost }: Props) {
 
               {/* Overlay text (no image) */}
               {!post.imageUrl && (
-                <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/80 via-black/40 to-transparent">
+                <div
+                  className="absolute left-0 right-0 p-4 bg-gradient-to-t from-black/80 via-black/40 to-transparent"
+                  style={{ bottom: brand.ctaType && brand.ctaType !== "NONE" ? "28px" : "0px" }}
+                >
                   {post.headline && (
                     <p className="text-white font-bold text-sm leading-tight mb-1">
                       {post.headline}
