@@ -1,6 +1,3 @@
-import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
-import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 import {
   Zap,
@@ -14,29 +11,7 @@ import {
   Star,
 } from "lucide-react";
 
-export default async function LandingPage() {
-  // Redirect authenticated users with a brand straight to the dashboard
-  let shouldRedirect: string | null = null;
-
-  try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (user) {
-      const brand = await prisma.brand.findFirst({
-        where: { userId: user.id },
-        orderBy: { createdAt: "desc" },
-      });
-
-      shouldRedirect = !brand || !brand.onboardingCompleted ? "/onboarding" : "/dashboard";
-    }
-  } catch {
-    // If auth check fails, fall through and show the landing page
-  }
-
-  if (shouldRedirect) redirect(shouldRedirect);
+export default function LandingPage() {
 
   return (
     <div
