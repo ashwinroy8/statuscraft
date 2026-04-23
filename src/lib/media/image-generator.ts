@@ -132,13 +132,18 @@ async function generateWithFlux({
     },
   });
 
-  // Replicate returns a URL or file handle
+  // Replicate returns various formats depending on SDK version
   if (typeof output === "string") return output;
   if (Array.isArray(output) && output.length > 0) {
     const item = output[0];
-    return typeof item === "string" ? item : (item as any).url?.() ?? "";
+    if (typeof item === "string") return item;
+    if (item && typeof (item as any).url === "function") return await (item as any).url();
+    if (item && typeof (item as any).url === "string") return (item as any).url;
+    return String(item);
   }
-  throw new Error("Flux returned unexpected output format");
+  if (output && typeof (output as any).url === "function") return await (output as any).url();
+  if (output && typeof (output as any).url === "string") return (output as any).url;
+  throw new Error("Flux returned unexpected output format: " + typeof output);
 }
 
 async function generateWithIdeogram({
