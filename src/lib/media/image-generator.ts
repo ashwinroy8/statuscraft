@@ -93,11 +93,11 @@ export async function generatePostImage(
     // Text overlay is handled via CSS in the frontend
   }
 
-  let storedUrl = imageUrl;
+  let storedUrl = typeof imageUrl === "string" ? imageUrl : String(imageUrl);
 
   // Only re-upload to Supabase if it's a Replicate URL (Cloudinary URLs are already CDN-hosted)
-  if (!imageUrl.includes("cloudinary.com")) {
-    storedUrl = await uploadToStorage(imageUrl, `posts/${postId}/status.jpg`);
+  if (storedUrl && !storedUrl.includes("cloudinary.com")) {
+    storedUrl = await uploadToStorage(storedUrl, `posts/${postId}/status.jpg`);
   }
 
   // Update post record
