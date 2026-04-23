@@ -16,6 +16,8 @@ import {
 
 export default async function LandingPage() {
   // Redirect authenticated users with a brand straight to the dashboard
+  let shouldRedirect: string | null = null;
+
   try {
     const supabase = await createClient();
     const {
@@ -28,15 +30,13 @@ export default async function LandingPage() {
         orderBy: { createdAt: "desc" },
       });
 
-      if (!brand || !brand.onboardingCompleted) {
-        redirect("/onboarding");
-      }
-
-      redirect("/dashboard");
+      shouldRedirect = !brand || !brand.onboardingCompleted ? "/onboarding" : "/dashboard";
     }
   } catch {
     // If auth check fails, fall through and show the landing page
   }
+
+  if (shouldRedirect) redirect(shouldRedirect);
 
   return (
     <div
