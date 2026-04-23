@@ -166,7 +166,7 @@ export async function scoreSignalForBrand(
       description: signal.description ?? undefined,
       metadata: signal.metadata,
     },
-    brand.category
+    brand.category ?? ""
   );
 
   const response = await client.messages.create({

@@ -54,7 +54,7 @@ export async function generateBrandProfile(brandId: string): Promise<BrandProfil
 
   const prompt = buildBrandAnalystPrompt({
     businessName: brand.name,
-    category: brand.category,
+    category: brand.category ?? "",
     subcategory: brand.subcategory ?? undefined,
     websiteText: brand.description ?? undefined,
     brochureText: brochureText || undefined,
