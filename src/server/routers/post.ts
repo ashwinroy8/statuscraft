@@ -140,6 +140,45 @@ export const postRouter = createTRPCRouter({
       return ctx.db.post.update({ where: { id }, data });
     }),
 
+  logAnalytics: protectedProcedure
+    .input(
+      z.object({
+        id: z.string(),
+        views: z.number().min(0),
+        replies: z.number().min(0),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const post = await ctx.db.post.findUnique({
+        where: { id: input.id },
+        include: { brand: true },
+      });
+      if (!post || post.brand.userId !== ctx.user.id)
+        throw new TRPCError({ code: "NOT_FOUND" });
+
+      const engagementRate =
+        input.views > 0
+          ? Math.round((input.replies / input.views) * 100 * 10) / 10
+          : 0;
+
+      return ctx.db.postAnalytics.upsert({
+        where: { postId: input.id },
+        create: {
+          postId: input.id,
+          views: input.views,
+          replies: input.replies,
+          engagementRate,
+          fetchedAt: new Date(),
+        },
+        update: {
+          views: input.views,
+          replies: input.replies,
+          engagementRate,
+          fetchedAt: new Date(),
+        },
+      });
+    }),
+
   analyticsOverview: protectedProcedure
     .input(
       z.object({
