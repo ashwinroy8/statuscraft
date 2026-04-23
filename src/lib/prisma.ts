@@ -8,7 +8,7 @@ const globalForPrisma = globalThis as unknown as {
 
 function createPrismaClient() {
   const useIndividual = !!process.env.DB_HOST;
-  console.log("Prisma init — useIndividual:", useIndividual, "DB_HOST:", process.env.DB_HOST, "DB_USER:", process.env.DB_USER);
+  console.log("Prisma init — useIndividual:", useIndividual, "DB_HOST:", process.env.DB_HOST, "DB_USER:", process.env.DB_USER, "DB_PASSWORD length:", process.env.DB_PASSWORD?.length, "DB_PASSWORD first char:", process.env.DB_PASSWORD?.[0]);
   const pool = new pg.Pool(
     useIndividual
       ? {
