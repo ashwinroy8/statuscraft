@@ -12,7 +12,8 @@ export async function transcribeAudio(audioBuffer: Buffer): Promise<Transcriptio
   if (!groqApiKey) throw new Error("GROQ_API_KEY is not set");
 
   const formData = new FormData();
-  const audioBlob = new Blob([audioBuffer], { type: "audio/ogg" });
+  const arrayBuffer = audioBuffer.buffer.slice(audioBuffer.byteOffset, audioBuffer.byteOffset + audioBuffer.byteLength) as ArrayBuffer;
+  const audioBlob = new Blob([arrayBuffer], { type: "audio/ogg" });
   formData.append("file", audioBlob, "audio.ogg");
   formData.append("model", "whisper-large-v3-turbo");
   formData.append("response_format", "verbose_json");

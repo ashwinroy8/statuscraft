@@ -33,4 +33,14 @@ export const settingsRouter = createTRPCRouter({
         update: input,
       });
     }),
+
+  updateWhatsappPhone: protectedProcedure
+    .input(z.object({ phone: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      return ctx.db.settings.upsert({
+        where: { userId: ctx.user.id },
+        create: { userId: ctx.user.id, whatsappOwnerPhone: input.phone },
+        update: { whatsappOwnerPhone: input.phone },
+      });
+    }),
 });

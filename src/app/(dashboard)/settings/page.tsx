@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 import { trpc } from "@/lib/trpc/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Settings, MessageCircle, Bell, Clock, Loader2, Check } from "lucide-react";
+import { Settings, MessageCircle, Bell, Clock, Loader2, Check, Bot } from "lucide-react";
 import { formatTime } from "@/lib/utils";
 
 const POST_TIMES = [
@@ -16,12 +16,17 @@ const POST_TIMES = [
 export default function SettingsPage() {
   const { data: settings, isLoading } = trpc.settings.get.useQuery();
   const update = trpc.settings.update.useMutation();
+  const updateWhatsappPhone = trpc.settings.updateWhatsappPhone.useMutation();
 
   const [autoApprove, setAutoApprove] = useState(false);
   const [maxPosts, setMaxPosts] = useState(3);
   const [postTimes, setPostTimes] = useState<string[]>(["08:00", "12:00", "18:00"]);
   const [timezone, setTimezone] = useState("Asia/Kolkata");
   const [saved, setSaved] = useState(false);
+
+  // WhatsApp Bot section
+  const [ownerPhone, setOwnerPhone] = useState("");
+  const [phoneSaved, setPhoneSaved] = useState(false);
 
   useEffect(() => {
     if (settings) {
@@ -30,8 +35,15 @@ export default function SettingsPage() {
       setTimezone(settings.timezone);
       const times = settings.preferredPostTimes;
       if (Array.isArray(times)) setPostTimes(times as string[]);
+      if (settings.whatsappOwnerPhone) setOwnerPhone(settings.whatsappOwnerPhone);
     }
   }, [settings]);
+
+  async function handleSavePhone() {
+    await updateWhatsappPhone.mutateAsync({ phone: ownerPhone });
+    setPhoneSaved(true);
+    setTimeout(() => setPhoneSaved(false), 2000);
+  }
 
   async function handleSave() {
     await update.mutateAsync({
@@ -179,6 +191,43 @@ export default function SettingsPage() {
               />
             </button>
           </div>
+        </div>
+
+        {/* WhatsApp Bot */}
+        <div className="bg-[#141416] border border-white/[0.06] rounded-2xl p-6">
+          <div className="flex items-center gap-2 mb-4">
+            <Bot className="w-4 h-4 text-[#25D366]" />
+            <h2 className="font-semibold">WhatsApp Bot</h2>
+          </div>
+          <div className="mb-4">
+            <label className="block text-sm font-medium mb-1.5">Your WhatsApp Number</label>
+            <input
+              type="text"
+              value={ownerPhone}
+              onChange={(e) => setOwnerPhone(e.target.value)}
+              placeholder="91XXXXXXXXXX (country code + number, no spaces)"
+              className="w-full bg-[#1a1a1d] border border-white/[0.08] rounded-xl px-3 py-2.5 text-sm outline-none focus:border-[#25D366]/40 transition-colors placeholder:text-[#555562]"
+            />
+            <p className="text-xs text-[#555562] mt-1.5">
+              The bot sends your daily posts to this number. Must match the number registered with Meta.
+            </p>
+          </div>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={handleSavePhone}
+            disabled={updateWhatsappPhone.isPending || !ownerPhone.trim()}
+          >
+            {updateWhatsappPhone.isPending ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : phoneSaved ? (
+              <>
+                <Check className="w-4 h-4" /> Saved!
+              </>
+            ) : (
+              "Save Number"
+            )}
+          </Button>
         </div>
 
         {/* Save */}

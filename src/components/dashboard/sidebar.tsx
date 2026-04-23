@@ -16,6 +16,8 @@ import {
   Building2,
   LogOut,
   Shield,
+  Package,
+  Mic,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
@@ -30,6 +32,8 @@ const NAV_ITEMS = [
   { href: "/analytics", icon: BarChart2, label: "Analytics" },
   { href: "/brand", icon: Building2, label: "Brand" },
   { href: "/templates", icon: Layers, label: "Templates" },
+  { href: "/products", icon: Package, label: "Products" },
+  { href: "/voice", icon: Mic, label: "Voice to Post" },
 ];
 
 const BOTTOM_ITEMS = [
