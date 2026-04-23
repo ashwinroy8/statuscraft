@@ -1,8 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
-import DashboardClient from "../dashboard-client";
-import { format } from "date-fns";
+import DashboardClient from "./dashboard-client";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -12,27 +11,32 @@ export default async function DashboardPage() {
 
   if (!user) redirect("/login");
 
-  // Ensure user exists in DB
-  await prisma.user.upsert({
-    where: { email: user.email! },
-    create: {
-      id: user.id,
-      email: user.email!,
-      name: user.user_metadata?.full_name ?? null,
-      avatarUrl: user.user_metadata?.avatar_url ?? null,
-    },
-    update: {
-      name: user.user_metadata?.full_name ?? undefined,
-      avatarUrl: user.user_metadata?.avatar_url ?? undefined,
-    },
-  });
+  // Get or create user record in our DB
+  let dbUser = await prisma.user.findUnique({ where: { email: user.email! } });
+  if (!dbUser) {
+    dbUser = await prisma.user.create({
+      data: {
+        id: user.id,
+        email: user.email!,
+        name: user.user_metadata?.full_name,
+        avatarUrl: user.user_metadata?.avatar_url,
+      },
+    });
+  }
 
-  const brand = await prisma.brand.findFirst({
-    where: { userId: user.id, onboardingCompleted: true },
+  // Get brands
+  const brands = await prisma.brand.findMany({
+    where: { userId: user.id },
     orderBy: { createdAt: "desc" },
   });
-  if (!brand) redirect("/onboarding");
 
+  if (brands.length === 0 || !brands[0].onboardingCompleted) {
+    redirect("/onboarding");
+  }
+
+  const brand = brands[0];
+
+  // Today's posts
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const tomorrow = new Date(today);
@@ -50,6 +54,7 @@ export default async function DashboardPage() {
     orderBy: [{ status: "asc" }, { scheduledAt: "asc" }],
   });
 
+  // 30-day stats
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
   const [totalPosts, sentPosts, analytics] = await Promise.all([
     prisma.post.count({ where: { brandId: brand.id, createdAt: { gte: thirtyDaysAgo } } }),
@@ -61,6 +66,7 @@ export default async function DashboardPage() {
     }),
   ]);
 
+  // Active signals
   const signals = await prisma.signal.findMany({
     where: {
       relevanceScore: { gte: 60 },
