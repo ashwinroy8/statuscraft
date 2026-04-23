@@ -5,7 +5,7 @@ import { trpc } from "@/lib/trpc/client";
 import { Badge } from "@/components/ui/badge";
 import { Radio, RefreshCw, Loader2, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useState } from "react";
+import { useEffect, useRef } from "react";
 
 const SIGNAL_COLORS: Record<string, { badge: any; dot: string }> = {
   TRENDING: { badge: "gold", dot: "bg-[#F4A100]" },
@@ -23,17 +23,21 @@ export default function SignalsPage() {
     limit: 50,
   });
 
-  const [scanning, setScanning] = useState(false);
+  const scan = trpc.signal.scan.useMutation({
+    onSuccess: () => refetch(),
+  });
 
-  async function rescan() {
-    setScanning(true);
-    await fetch("/api/cron/scan-signals", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${process.env.NEXT_PUBLIC_APP_URL}` },
-    });
-    await refetch();
-    setScanning(false);
-  }
+  const autoScanned = useRef(false);
+
+  // Auto-scan on first load if no signals exist
+  useEffect(() => {
+    if (!isLoading && (!signals || signals.length === 0) && !autoScanned.current) {
+      autoScanned.current = true;
+      scan.mutate();
+    }
+  }, [isLoading, signals]);
+
+  const isScanning = scan.isPending;
 
   return (
     <div className="p-8 max-w-[900px] mx-auto">
@@ -53,8 +57,8 @@ export default function SignalsPage() {
             content
           </p>
         </div>
-        <Button variant="secondary" onClick={rescan} disabled={scanning}>
-          {scanning ? (
+        <Button variant="secondary" onClick={() => scan.mutate()} disabled={isScanning}>
+          {isScanning ? (
             <Loader2 className="w-4 h-4 animate-spin" />
           ) : (
             <RefreshCw className="w-4 h-4" />
@@ -63,9 +67,12 @@ export default function SignalsPage() {
         </Button>
       </motion.div>
 
-      {isLoading ? (
-        <div className="flex items-center justify-center py-20">
+      {isLoading || isScanning ? (
+        <div className="flex flex-col items-center justify-center py-20 gap-3">
           <Loader2 className="w-6 h-6 animate-spin text-[#25D366]" />
+          <p className="text-sm text-[#8b8b9a]">
+            {isScanning ? "Scanning for signals…" : "Loading…"}
+          </p>
         </div>
       ) : signals && signals.length > 0 ? (
         <div className="space-y-3">
@@ -145,9 +152,9 @@ export default function SignalsPage() {
       ) : (
         <div className="flex flex-col items-center justify-center py-20">
           <Radio className="w-10 h-10 text-[#555562] mb-3" />
-          <p className="text-[#8b8b9a]">No signals detected yet</p>
+          <p className="text-[#8b8b9a]">No signals found for today</p>
           <p className="text-xs text-[#555562] mt-1">
-            Signals scan runs every 6 hours. Click Scan Now to run immediately.
+            Click Scan Now to check for upcoming events and trends
           </p>
         </div>
       )}

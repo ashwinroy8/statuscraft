@@ -13,7 +13,6 @@ import {
   ToggleRight,
   X,
 } from "lucide-react";
-import { CAMPAIGN_TYPES, FREQUENCIES, TONALITIES } from "@/lib/constants";
 
 const CAMPAIGN_TYPE_OPTIONS = [
   { id: "QUIZ", label: "Quiz Monday", desc: "Weekly trivia to engage your audience" },

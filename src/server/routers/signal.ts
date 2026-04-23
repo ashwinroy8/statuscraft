@@ -1,8 +1,14 @@
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../trpc";
 import { SignalType } from "@/generated/prisma/enums";
+import { fetchSignals } from "@/lib/ai/signal-radar";
 
 export const signalRouter = createTRPCRouter({
+  scan: protectedProcedure.mutation(async () => {
+    await fetchSignals();
+    return { success: true };
+  }),
+
   list: protectedProcedure
     .input(
       z.object({
