@@ -68,14 +68,68 @@ export default function PostPreviewClient({ post: initialPost }: Props) {
 
   async function downloadImage() {
     if (!post.imageUrl) return;
-    const res = await fetch(post.imageUrl);
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${post.headline?.slice(0, 40) ?? "status"}.jpg`;
-    a.click();
-    URL.revokeObjectURL(url);
+
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.src = post.imageUrl;
+
+    await new Promise((resolve) => { img.onload = resolve; });
+
+    const canvas = document.createElement("canvas");
+    canvas.width = 1080;
+    canvas.height = 1920;
+    const ctx = canvas.getContext("2d")!;
+
+    // Draw background image
+    ctx.drawImage(img, 0, 0, 1080, 1920);
+
+    // Dark gradient at bottom
+    const gradient = ctx.createLinearGradient(0, 1400, 0, 1920);
+    gradient.addColorStop(0, "rgba(0,0,0,0)");
+    gradient.addColorStop(1, "rgba(0,0,0,0.85)");
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, 1080, 1920);
+
+    // Headline text
+    if (post.headline) {
+      ctx.font = "bold 72px Arial";
+      ctx.fillStyle = "#ffffff";
+      ctx.shadowColor = "rgba(0,0,0,0.8)";
+      ctx.shadowBlur = 10;
+      // Word wrap
+      const words = post.headline.split(" ");
+      let line = "";
+      let y = 1680;
+      for (const word of words) {
+        const test = line + word + " ";
+        if (ctx.measureText(test).width > 960 && line) {
+          ctx.fillText(line, 60, y);
+          line = word + " ";
+          y += 85;
+        } else {
+          line = test;
+        }
+      }
+      ctx.fillText(line, 60, y);
+    }
+
+    // CTA text
+    if (post.ctaText) {
+      ctx.font = "bold 48px Arial";
+      ctx.fillStyle = "#25D366";
+      ctx.shadowBlur = 0;
+      ctx.fillText(post.ctaText, 60, 1870);
+    }
+
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${post.headline?.slice(0, 40) ?? "status"}.jpg`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }, "image/jpeg", 0.95);
   }
 
   async function saveEdits() {
