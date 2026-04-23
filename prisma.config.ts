@@ -24,6 +24,6 @@ export default defineConfig({
     path: "prisma/migrations",
   },
   datasource: {
-    url: process.env["DIRECT_URL"],
+    url: process.env["NEON_DATABASE_URL"] ?? process.env["DIRECT_URL"],
   },
 });
