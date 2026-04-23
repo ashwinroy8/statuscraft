@@ -11,10 +11,16 @@ export default async function RootPage() {
 
   if (!user) redirect("/login");
 
-  const brand = await prisma.brand.findFirst({
-    where: { userId: user.id },
-    orderBy: { createdAt: "desc" },
-  });
+  let brand;
+  try {
+    brand = await prisma.brand.findFirst({
+      where: { userId: user.id },
+      orderBy: { createdAt: "desc" },
+    });
+  } catch (err) {
+    console.error("DB error on root page:", err);
+    throw err;
+  }
 
   if (!brand || !brand.onboardingCompleted) {
     redirect("/onboarding");
