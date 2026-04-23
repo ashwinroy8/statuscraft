@@ -61,12 +61,13 @@ export interface VoicePostResult {
 
 export async function processVoiceNote(
   audioBuffer: Buffer,
-  brandId: string
+  brandId: string,
+  originalFilename?: string
 ): Promise<VoicePostResult> {
   const brand = await prisma.brand.findUniqueOrThrow({ where: { id: brandId } });
 
   // Step 1 — Transcribe
-  const transcription = await transcribeAudio(audioBuffer);
+  const transcription = await transcribeAudio(audioBuffer, originalFilename);
 
   // Step 2 — Extract intent + generate 3 variants in one Claude call
   const userPrompt = `Voice note from ${brand.name} (${brand.category ?? "business"} owner):

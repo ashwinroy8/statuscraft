@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
   try {
     const arrayBuffer = await audioFile.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
-    const result = await processVoiceNote(buffer, brandId);
+    const result = await processVoiceNote(buffer, brandId, audioFile.name);
     return NextResponse.json(result);
   } catch (err) {
     console.error("voice-to-post error:", err);

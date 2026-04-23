@@ -7,14 +7,35 @@ export interface TranscriptionResult {
   isHinglish: boolean;
 }
 
-export async function transcribeAudio(audioBuffer: Buffer): Promise<TranscriptionResult> {
+// Map any input mime/extension to one Groq accepts
+function normaliseAudio(buffer: Buffer, originalName = "audio.ogg"): { blob: Blob; filename: string } {
+  const ext = originalName.split(".").pop()?.toLowerCase() ?? "ogg";
+
+  // AAC and M4A are the same codec — Groq accepts m4a
+  if (ext === "aac") {
+    const ab = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer;
+    return { blob: new Blob([ab], { type: "audio/m4a" }), filename: "audio.m4a" };
+  }
+
+  // Supported types pass through unchanged
+  const supported = ["flac", "mp3", "mp4", "mpeg", "mpga", "m4a", "ogg", "opus", "wav", "webm"];
+  const safExt = supported.includes(ext) ? ext : "ogg";
+  const mimeMap: Record<string, string> = {
+    flac: "audio/flac", mp3: "audio/mpeg", mp4: "audio/mp4", mpeg: "audio/mpeg",
+    mpga: "audio/mpeg", m4a: "audio/m4a", ogg: "audio/ogg", opus: "audio/opus",
+    wav: "audio/wav", webm: "audio/webm",
+  };
+  const ab = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer;
+  return { blob: new Blob([ab], { type: mimeMap[safExt] ?? "audio/ogg" }), filename: `audio.${safExt}` };
+}
+
+export async function transcribeAudio(audioBuffer: Buffer, originalName?: string): Promise<TranscriptionResult> {
   const groqApiKey = process.env.GROQ_API_KEY;
   if (!groqApiKey) throw new Error("GROQ_API_KEY is not set");
 
+  const { blob: audioBlob, filename } = normaliseAudio(audioBuffer, originalName);
   const formData = new FormData();
-  const arrayBuffer = audioBuffer.buffer.slice(audioBuffer.byteOffset, audioBuffer.byteOffset + audioBuffer.byteLength) as ArrayBuffer;
-  const audioBlob = new Blob([arrayBuffer], { type: "audio/ogg" });
-  formData.append("file", audioBlob, "audio.ogg");
+  formData.append("file", audioBlob, filename);
   formData.append("model", "whisper-large-v3-turbo");
   formData.append("response_format", "verbose_json");
   // No language specified — auto-detect Hindi, Tamil, Marathi, etc.
