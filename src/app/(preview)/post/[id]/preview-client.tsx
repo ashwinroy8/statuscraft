@@ -157,6 +157,14 @@ export default function PostPreviewClient({ post: initialPost }: Props) {
       ctx.textAlign = "left";
     }
 
+    // Watermark
+    ctx.font = "500 28px Arial";
+    ctx.fillStyle = "rgba(255,255,255,0.35)";
+    ctx.textAlign = "right";
+    ctx.shadowBlur = 0;
+    ctx.fillText("✦ statuscraft.in", 1060, 1900);
+    ctx.textAlign = "left";
+
     canvas.toBlob((blob) => {
       if (!blob) return;
       const url = URL.createObjectURL(blob);
@@ -298,6 +306,13 @@ export default function PostPreviewClient({ post: initialPost }: Props) {
                   )}
                 </div>
               )}
+
+              {/* Watermark — free plan */}
+              <div className="absolute bottom-8 right-2 z-30">
+                <span className="text-[9px] text-white/40 font-medium tracking-wider">
+                  ✦ statuscraft.in
+                </span>
+              </div>
 
               {/* Progress bar (like WhatsApp status) */}
               <div className="absolute top-2 left-2 right-2 h-0.5 bg-white/20 rounded-full">

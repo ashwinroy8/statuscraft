@@ -100,6 +100,10 @@ export async function generatePostImage(
     storedUrl = await uploadToStorage(storedUrl, `posts/${postId}/status.jpg`);
   }
 
+  // Watermark is applied client-side in preview-client.tsx (canvas download)
+  // and as a CSS overlay in the phone mockup. Server-side watermarking
+  // via Sharp would be needed for plan-based removal (future: PRO plan).
+
   // Update post record
   await prisma.post.update({
     where: { id: postId },

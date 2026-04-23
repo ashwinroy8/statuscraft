@@ -1,38 +1,113 @@
 import { prisma } from "@/lib/prisma";
+import { handleIncomingMessage } from "./conversation-handler";
 
-const WHATSAPP_API_BASE = "https://graph.facebook.com/v19.0";
+const WHATSAPP_API_BASE = "https://graph.facebook.com/v20.0";
 
-interface WhatsAppStatusPayload {
-  messaging_product: "whatsapp";
-  to: string;
-  type: "image" | "video";
-  image?: { link: string; caption?: string };
-  video?: { link: string; caption?: string };
+function getPhoneId() {
+  return process.env.WHATSAPP_PHONE_NUMBER_ID!;
 }
 
-async function callWhatsAppApi(
-  phoneNumberId: string,
-  accessToken: string,
-  body: object
-) {
-  const res = await fetch(
-    `${WHATSAPP_API_BASE}/${phoneNumberId}/messages`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-    }
-  );
+function getToken() {
+  return process.env.WHATSAPP_ACCESS_TOKEN!;
+}
 
-  if (!res.ok) {
-    const error = await res.text();
-    throw new Error(`WhatsApp API error ${res.status}: ${error}`);
-  }
-
+async function callApi(path: string, body: object) {
+  const res = await fetch(`${WHATSAPP_API_BASE}/${path}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${getToken()}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`WhatsApp API ${res.status}: ${await res.text()}`);
   return res.json();
+}
+
+export async function sendText(to: string, text: string) {
+  return callApi(`${getPhoneId()}/messages`, {
+    messaging_product: "whatsapp",
+    to,
+    type: "text",
+    text: { body: text },
+  });
+}
+
+export async function sendImage(to: string, imageUrl: string, caption?: string) {
+  return callApi(`${getPhoneId()}/messages`, {
+    messaging_product: "whatsapp",
+    to,
+    type: "image",
+    image: { link: imageUrl, ...(caption ? { caption } : {}) },
+  });
+}
+
+export async function sendInteractive(to: string, interactive: object) {
+  return callApi(`${getPhoneId()}/messages`, {
+    messaging_product: "whatsapp",
+    to,
+    type: "interactive",
+    interactive,
+  });
+}
+
+export async function sendButtons(
+  to: string,
+  headerText: string,
+  bodyText: string,
+  buttons: Array<{ id: string; title: string }>
+) {
+  return sendInteractive(to, {
+    type: "button",
+    header: { type: "text", text: headerText },
+    body: { text: bodyText },
+    action: {
+      buttons: buttons.map(b => ({
+        type: "reply",
+        reply: { id: b.id, title: b.title },
+      })),
+    },
+  });
+}
+
+export async function sendList(
+  to: string,
+  headerText: string,
+  bodyText: string,
+  buttonLabel: string,
+  sections: Array<{
+    title: string;
+    rows: Array<{ id: string; title: string; description?: string }>;
+  }>
+) {
+  return sendInteractive(to, {
+    type: "list",
+    header: { type: "text", text: headerText },
+    body: { text: bodyText },
+    action: {
+      button: buttonLabel,
+      sections,
+    },
+  });
+}
+
+export async function markAsRead(messageId: string) {
+  return callApi(`${getPhoneId()}/messages`, {
+    messaging_product: "whatsapp",
+    status: "read",
+    message_id: messageId,
+  });
+}
+
+export async function downloadMedia(mediaId: string): Promise<Buffer> {
+  const infoRes = await fetch(`${WHATSAPP_API_BASE}/${mediaId}`, {
+    headers: { Authorization: `Bearer ${getToken()}` },
+  });
+  const { url } = await infoRes.json();
+  const mediaRes = await fetch(url, {
+    headers: { Authorization: `Bearer ${getToken()}` },
+  });
+  return Buffer.from(await mediaRes.arrayBuffer());
 }
 
 export async function sendPostAsStatus(postId: string): Promise<void> {
@@ -45,16 +120,10 @@ export async function sendPostAsStatus(postId: string): Promise<void> {
     where: { userId: post.brand.userId },
   });
 
-  if (!settings?.whatsappConnected || !settings.whatsappBusinessPhoneId) {
+  if (!settings?.whatsappConnected) {
     throw new Error("WhatsApp not connected for this brand");
   }
 
-  const accessToken = process.env.WHATSAPP_ACCESS_TOKEN!;
-  const phoneNumberId = settings.whatsappBusinessPhoneId;
-
-  // WhatsApp Status is sent to the business's own number as a "broadcast"
-  // In the Business API, statuses are posted via the status update endpoint
-  // For now, we send as a message to self (testing) or broadcast
   const toPhone = post.brand.user.phone ?? "";
 
   if (!post.imageUrl && !post.videoUrl) {
@@ -65,32 +134,38 @@ export async function sendPostAsStatus(postId: string): Promise<void> {
     .filter(Boolean)
     .join("\n\n");
 
-  const payload: WhatsAppStatusPayload = {
-    messaging_product: "whatsapp",
-    to: toPhone,
-    type: post.videoUrl ? "video" : "image",
-    ...(post.videoUrl
-      ? { video: { link: post.videoUrl, caption } }
-      : { image: { link: post.imageUrl!, caption } }),
-  };
+  if (post.videoUrl) {
+    await callApi(`${getPhoneId()}/messages`, {
+      messaging_product: "whatsapp",
+      to: toPhone,
+      type: "video",
+      video: { link: post.videoUrl, caption },
+    });
+  } else {
+    await sendImage(toPhone, post.imageUrl!, caption);
+  }
 
-  const result = await callWhatsAppApi(phoneNumberId, accessToken, payload);
-
-  // Update post as sent
   await prisma.post.update({
     where: { id: postId },
-    data: {
-      status: "SENT",
-      sentAt: new Date(),
-    },
+    data: { status: "SENT", sentAt: new Date() },
   });
 
-  // Create analytics record
   await prisma.postAnalytics.upsert({
     where: { postId },
     create: { postId, views: 0, replies: 0 },
     update: {},
   });
+}
+
+export function verifyWhatsAppWebhook(
+  mode: string,
+  token: string,
+  challenge: string
+): string | null {
+  if (mode === "subscribe" && token === process.env.WHATSAPP_VERIFY_TOKEN) {
+    return challenge;
+  }
+  return null;
 }
 
 export async function processWhatsAppWebhook(body: any): Promise<void> {
@@ -100,38 +175,23 @@ export async function processWhatsAppWebhook(body: any): Promise<void> {
 
   if (!value) return;
 
-  // Handle incoming messages (replies to status)
+  const phoneNumberId: string =
+    value.metadata?.phone_number_id ?? process.env.WHATSAPP_PHONE_NUMBER_ID ?? "";
+
+  // Handle incoming messages
   const messages = value.messages ?? [];
   for (const message of messages) {
-    const from = message.from; // phone number of the sender
-    const text = message.text?.body ?? "";
-
-    // Find recent sent posts from this brand's phone
-    // This is simplified — in production, you'd match by phone number to brand
-    const recentPost = await prisma.post.findFirst({
-      where: { status: "SENT" },
-      include: { brand: { include: { user: true } }, analytics: true },
-      orderBy: { sentAt: "desc" },
-    });
-
-    if (recentPost && (recentPost as any)?.analytics) {
-      const existing = ((recentPost as any).analytics.responseTexts as string[]) ?? [];
-      await prisma.postAnalytics.update({
-        where: { postId: recentPost.id },
-        data: {
-          replies: { increment: 1 },
-          responseTexts: [...existing, text].slice(-50), // Keep last 50 replies
-        },
-      });
+    try {
+      await handleIncomingMessage(message, value.contacts?.[0], phoneNumberId);
+    } catch (e) {
+      console.error("Error handling incoming message:", e);
     }
   }
 
-  // Handle message status updates (delivered, read)
+  // Handle message status updates (delivered, read) — increment views
   const statuses = value.statuses ?? [];
   for (const status of statuses) {
     if (status.status === "read") {
-      // Find the post by message ID (if we stored it)
-      // This is a simplification
       const recentPost = await prisma.post.findFirst({
         where: { status: "SENT" },
         orderBy: { sentAt: "desc" },
@@ -145,18 +205,4 @@ export async function processWhatsAppWebhook(body: any): Promise<void> {
       }
     }
   }
-}
-
-export function verifyWhatsAppWebhook(
-  mode: string,
-  token: string,
-  challenge: string
-): string | null {
-  if (
-    mode === "subscribe" &&
-    token === process.env.WHATSAPP_VERIFY_TOKEN
-  ) {
-    return challenge;
-  }
-  return null;
 }

@@ -11,6 +11,7 @@ enum Plan {
   FREE
   PRO
   BUSINESS
+  AGENCY
 }
 
 enum PostType {
@@ -92,8 +93,10 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  brands   Brand[]
-  settings Settings?
+  brands               Brand[]
+  settings             Settings?
+  conversationSessions ConversationSession[]
+  festivalPreferences  FestivalPreferences?
 
   @@index([email])
 }
@@ -125,11 +128,15 @@ model Brand {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  posts     Post[]
-  campaigns Campaign[]
-  brochures Brochure[]
-  templates Template[]
+  user                 User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  posts                Post[]
+  campaigns            Campaign[]
+  brochures            Brochure[]
+  templates            Template[]
+  products             Product[]
+  orders               Order[]
+  conversationSessions ConversationSession[]
+  watermarkImpressions WatermarkImpression[]
 
   @@index([userId])
 }
@@ -173,14 +180,17 @@ model Post {
 
   signalSource Json?
   aiReasoning  String?
+  metadata     Json?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  brand     Brand          @relation(fields: [brandId], references: [id], onDelete: Cascade)
-  campaign  Campaign?      @relation(fields: [campaignId], references: [id])
-  signal    Signal?        @relation(fields: [signalId], references: [id])
-  analytics PostAnalytics?
+  brand        Brand          @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  campaign     Campaign?      @relation(fields: [campaignId], references: [id])
+  signal       Signal?        @relation(fields: [signalId], references: [id])
+  analytics    PostAnalytics?
+  postProducts PostProduct[]
+  statusReplies StatusReply[]
 
   @@index([brandId])
   @@index([campaignId])
@@ -278,9 +288,165 @@ model Settings {
 
   whatsappConnected       Boolean @default(false)
   whatsappBusinessPhoneId String?
+  whatsappOwnerPhone      String?
   notificationPreferences Json    @default("{\"email\": true, \"push\": true, \"whatsapp\": false}")
 
   updatedAt DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ─── Feature 1: WhatsApp Bot ──────────────────────────────────────────────────
+
+model ConversationSession {
+  id        String @id @default(uuid())
+  userId    String
+  brandId   String
+  phone     String // owner's WhatsApp phone number
+
+  state     String   @default("IDLE")
+  stateData Json?
+  lastMessageAt DateTime @default(now())
+  expiresAt     DateTime
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  brand Brand @relation(fields: [brandId], references: [id], onDelete: Cascade)
+
+  @@index([phone])
+  @@index([userId])
+}
+
+// ─── Feature 2: Festival Engine ───────────────────────────────────────────────
+
+model Festival {
+  id           String    @id @default(uuid())
+  name         String
+  nameLocal    String?
+  date         DateTime
+  endDate      DateTime?
+  type         String    // NATIONAL | RELIGIOUS | CULTURAL | INTERNATIONAL | FUN
+  religion     String?   // HINDU | MUSLIM | CHRISTIAN | SIKH | JAIN | BUDDHIST | SECULAR
+  regions      String[]  // ["ALL"] or specific regions
+  significance String
+  keywords     String[]
+  visualCues   String[]
+  greetingText String[]
+  colorPalette Json
+  tier         String    // MAJOR | MEDIUM | MINOR
+  daysBeforeReminder Int @default(3)
+
+  @@index([date])
+  @@index([tier])
+}
+
+model FestivalPreferences {
+  id                   String   @id @default(uuid())
+  userId               String   @unique
+  religions            String[]
+  regions              String[]
+  includeInternational Boolean  @default(true)
+  includeFunDays       Boolean  @default(true)
+  autoPost             Boolean  @default(false)
+  language             String   @default("en")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ─── Feature 5: Reply-to-Buy Commerce ────────────────────────────────────────
+
+model Product {
+  id            String   @id @default(uuid())
+  brandId       String
+  name          String
+  description   String?
+  price         Float
+  discountPrice Float?
+  currency      String   @default("INR")
+  imageUrls     String[]
+  variants      Json?
+  inStock       Boolean  @default(true)
+  catalogId     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  brand        Brand         @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  orders       Order[]
+  postProducts PostProduct[]
+
+  @@index([brandId])
+}
+
+model PostProduct {
+  id        String @id @default(uuid())
+  postId    String
+  productId String
+
+  post    Post    @relation(fields: [postId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, productId])
+}
+
+model StatusReply {
+  id           String  @id @default(uuid())
+  postId       String
+  contactPhone String
+  contactName  String?
+  replyText    String
+  replyType    String  // PURCHASE_INTENT | QUESTION | QUIZ_ANSWER | POLL_VOTE | GENERAL | REACTION
+  sentiment    String?
+  autoReplySent Boolean @default(false)
+  autoReplyText String?
+  convertedToOrder Boolean @default(false)
+  repliedAt    DateTime @default(now())
+
+  post  Post   @relation(fields: [postId], references: [id], onDelete: Cascade)
+  order Order?
+
+  @@index([postId])
+  @@index([contactPhone])
+}
+
+model Order {
+  id            String  @id @default(uuid())
+  brandId       String
+  statusReplyId String? @unique
+  contactPhone  String
+  contactName   String?
+  productId     String
+  quantity      Int     @default(1)
+  amount        Float
+  paymentLink   String?
+  paymentStatus String  @default("PENDING") // PENDING | PAID | FAILED | REFUNDED
+  status        String  @default("RECEIVED") // RECEIVED | CONFIRMED | DELIVERED | CANCELLED
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  brand       Brand        @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  product     Product      @relation(fields: [productId], references: [id])
+  statusReply StatusReply? @relation(fields: [statusReplyId], references: [id])
+
+  @@index([brandId])
+  @@index([contactPhone])
+  @@index([paymentStatus])
+}
+
+// ─── Feature 3: Watermark Analytics ─────────────────────────────────────────
+
+model WatermarkImpression {
+  id             String    @id @default(uuid())
+  sourceBrandId  String
+  referredUserId String?
+  landingPageUrl String
+  visitedAt      DateTime  @default(now())
+  convertedAt    DateTime?
+
+  sourceBrand Brand @relation(fields: [sourceBrandId], references: [id], onDelete: Cascade)
+
+  @@index([sourceBrandId])
 }
