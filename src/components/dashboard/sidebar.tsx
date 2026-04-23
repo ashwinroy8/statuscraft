@@ -14,11 +14,13 @@ import {
   Layers,
   Settings,
   Building2,
-  MessageCircle,
   LogOut,
+  Shield,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
+
+const ADMIN_EMAIL = "ashwin@mobcast.in";
 
 const NAV_ITEMS = [
   { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
@@ -34,10 +36,15 @@ const BOTTOM_ITEMS = [
   { href: "/settings", icon: Settings, label: "Settings" },
 ];
 
-export function Sidebar() {
+interface SidebarProps {
+  userEmail?: string;
+}
+
+export function Sidebar({ userEmail }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const supabase = createClient();
+  const isAdmin = userEmail === ADMIN_EMAIL;
 
   async function signOut() {
     await supabase.auth.signOut();
@@ -118,6 +125,20 @@ export function Sidebar() {
             </Link>
           );
         })}
+        {isAdmin && (
+          <Link
+            href="/admin"
+            className={cn(
+              "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-colors",
+              pathname === "/admin"
+                ? "bg-[#F4A100]/10 text-[#F4A100]"
+                : "text-[#8b8b9a] hover:text-[#F4A100] hover:bg-[#F4A100]/[0.06]"
+            )}
+          >
+            <Shield className="w-4 h-4 flex-shrink-0 text-[#F4A100]" />
+            Admin
+          </Link>
+        )}
         <button
           onClick={signOut}
           className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-[#8b8b9a] hover:text-red-400 hover:bg-red-500/[0.06] transition-colors"
