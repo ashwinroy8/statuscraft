@@ -13,7 +13,10 @@ const globalForPrisma = globalThis as unknown as {
 };
 
 function createPrismaClient() {
-  const connectionString = process.env.NEON_DATABASE_URL ?? process.env.DATABASE_URL!;
+  // NEON_DATABASE_URL is the Neon serverless DB used at runtime.
+  // DATABASE_URL is intentionally avoided here because Railway injects its own
+  // Postgres DATABASE_URL which would override any manually set value.
+  const connectionString = process.env.NEON_DATABASE_URL!;
   const adapter = new PrismaNeon({ connectionString } as any);
   return new PrismaClient({ adapter } as any);
 }
