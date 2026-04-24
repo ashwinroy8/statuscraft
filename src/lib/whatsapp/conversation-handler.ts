@@ -119,6 +119,8 @@ export async function handleIncomingMessage(
       message.interactive?.list_reply?.id ??
       "";
 
+    console.log(`[WA] Interactive message from ${from}, replyId: "${replyId}"`);
+
     if (replyId.startsWith("approve_all:")) {
       const postIds = replyId.replace("approve_all:", "").split(",");
       await prisma.post.updateMany({
@@ -228,6 +230,11 @@ export async function handleIncomingMessage(
       await upsertSession(user.id, brand.id, from, "FESTIVAL_REQUEST", {});
       return;
     }
+
+    // Fallback — unknown button
+    console.log(`[WA] Unhandled interactive replyId: "${replyId}"`);
+    await sendText(from, `Got your tap! (id: ${replyId}) — reply "hi" to see the menu again.`);
+    return;
   }
 
   // ── Handle text messages ───────────────────────────────────────────────────
