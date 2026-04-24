@@ -292,6 +292,8 @@ function AnimatedCounter({ value, suffix = "" }: { value: number; suffix?: strin
 export default function LandingPage() {
   const [lang, setLang] = useState<LangCode>("en");
   const [langDropdownOpen, setLangDropdownOpen] = useState(false);
+  const [showLangBanner, setShowLangBanner] = useState(false);
+  const [autoDetectedLang, setAutoDetectedLang] = useState<LangCode | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Auto-detect language
@@ -308,6 +310,11 @@ export default function LandingPage() {
         const detected: LangCode = REGION_TO_LANG[region] ?? "en";
         setLang(detected);
         localStorage.setItem("statuscraft_lang", detected);
+        // Show "switch to English" banner only if a non-English language was auto-detected
+        if (detected !== "en") {
+          setAutoDetectedLang(detected);
+          setShowLangBanner(true);
+        }
       })
       .catch(() => {/* stay on en */});
   }, []);
@@ -339,6 +346,51 @@ export default function LandingPage() {
 
   return (
     <div className="min-h-screen bg-[#0d0d0f] text-white" style={{ scrollBehavior: "smooth" }}>
+
+      {/* ── LANGUAGE DETECTED BANNER ── */}
+      <AnimatePresence>
+        {showLangBanner && autoDetectedLang && (
+          <motion.div
+            initial={{ y: 80, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 80, opacity: 0 }}
+            transition={{ type: "spring", bounce: 0.3, duration: 0.5 }}
+            className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-2rem)] max-w-md"
+          >
+            <div className="bg-[#1e1e24] border border-[#3a3a45] rounded-2xl px-4 py-3.5 shadow-2xl flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-[#25D366]/15 flex items-center justify-center flex-shrink-0">
+                <Globe className="w-4 h-4 text-[#25D366]" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-white leading-tight">
+                  Showing in {LANG_NAMES[autoDetectedLang]}
+                </p>
+                <p className="text-xs text-[#8b8b9a] mt-0.5">
+                  Based on your location
+                </p>
+              </div>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <button
+                  onClick={() => {
+                    switchLang("en");
+                    setShowLangBanner(false);
+                  }}
+                  className="text-xs font-semibold text-[#25D366] hover:text-white bg-[#25D366]/10 hover:bg-[#25D366]/20 px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap"
+                >
+                  Switch to English
+                </button>
+                <button
+                  onClick={() => setShowLangBanner(false)}
+                  className="text-[#555562] hover:text-white transition-colors text-lg leading-none"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* ── NAVBAR ── */}
       <nav className="sticky top-0 z-50 border-b border-[#2a2a35] bg-[#0d0d0f]/80 backdrop-blur-md">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 flex items-center justify-between h-16">
