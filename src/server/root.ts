@@ -5,6 +5,7 @@ import { signalRouter } from "./routers/signal";
 import { campaignRouter } from "./routers/campaign";
 import { settingsRouter } from "./routers/settings";
 import { productRouter } from "./routers/product";
+import { festivalRouter } from "./routers/festival";
 
 export const appRouter = createTRPCRouter({
   brand: brandRouter,
@@ -13,6 +14,7 @@ export const appRouter = createTRPCRouter({
   campaign: campaignRouter,
   settings: settingsRouter,
   product: productRouter,
+  festival: festivalRouter,
 });
 
 export type AppRouter = typeof appRouter;

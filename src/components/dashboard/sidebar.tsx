@@ -18,6 +18,7 @@ import {
   Shield,
   Package,
   Mic,
+  Sparkles,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
@@ -34,6 +35,7 @@ const NAV_ITEMS = [
   { href: "/templates", icon: Layers, label: "Templates" },
   { href: "/products", icon: Package, label: "Products" },
   { href: "/voice", icon: Mic, label: "Voice to Post" },
+  { href: "/festivals", icon: Sparkles, label: "Festivals" },
 ];
 
 const BOTTOM_ITEMS = [
