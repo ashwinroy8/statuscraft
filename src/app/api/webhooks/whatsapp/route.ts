@@ -1,6 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { createHmac } from "crypto";
-import { after } from "next/server";
 import {
   processWhatsAppWebhook,
   verifyWhatsAppWebhook,
@@ -25,7 +24,6 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   let body: any;
 
-  // Verify signature using App Secret (prevents spoofed requests)
   const appSecret = process.env.WHATSAPP_APP_SECRET;
   if (appSecret) {
     const rawBody = await req.text();
@@ -38,23 +36,15 @@ export async function POST(req: NextRequest) {
       console.error("WhatsApp webhook signature mismatch");
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-
     body = JSON.parse(rawBody);
   } else {
-    // No app secret configured — skip verification (dev mode)
     body = await req.json();
   }
 
-  // Return 200 to Meta IMMEDIATELY — then process in background.
-  // This prevents Meta from retrying because we took too long
-  // (voice note processing + image generation can take 60+ seconds).
-  after(async () => {
-    try {
-      await processWhatsAppWebhook(body);
-    } catch (e) {
-      console.error("WhatsApp webhook error:", e);
-    }
-  });
+  // Process in background — don't await so Meta gets 200 immediately
+  processWhatsAppWebhook(body).catch((e) =>
+    console.error("WhatsApp webhook error:", e)
+  );
 
   return NextResponse.json({ ok: true });
 }
