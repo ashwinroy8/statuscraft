@@ -24,13 +24,13 @@ export default async function DashboardPage() {
     });
   }
 
-  // Get brands
+  // Get brands — only completed ones
   const brands = await prisma.brand.findMany({
-    where: { userId: user.id },
+    where: { userId: user.id, onboardingCompleted: true },
     orderBy: { createdAt: "desc" },
   });
 
-  if (brands.length === 0 || !brands[0].onboardingCompleted) {
+  if (brands.length === 0) {
     redirect("/onboarding");
   }
 
