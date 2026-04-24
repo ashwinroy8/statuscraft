@@ -14,6 +14,7 @@ const POST_TIMES = [
 ];
 
 export default function SettingsPage() {
+  const utils = trpc.useUtils();
   const { data: settings, isLoading } = trpc.settings.get.useQuery();
   const update = trpc.settings.update.useMutation();
   const updateWhatsappPhone = trpc.settings.updateWhatsappPhone.useMutation();
@@ -41,8 +42,11 @@ export default function SettingsPage() {
 
   async function handleSavePhone() {
     await updateWhatsappPhone.mutateAsync({ phone: ownerPhone });
+    // Refresh settings so the "Connected" badge updates immediately
+    await utils.settings.get.invalidate();
     setPhoneSaved(true);
-    setTimeout(() => setPhoneSaved(false), 2000);
+    // Keep "Saved!" visible for 4 seconds so it's easy to notice
+    setTimeout(() => setPhoneSaved(false), 4000);
   }
 
   async function handleSave() {
@@ -215,17 +219,15 @@ export default function SettingsPage() {
             </p>
           </div>
           <Button
-            variant="secondary"
+            variant={phoneSaved ? "primary" : "secondary"}
             size="sm"
             onClick={handleSavePhone}
             disabled={updateWhatsappPhone.isPending || !ownerPhone.trim()}
           >
             {updateWhatsappPhone.isPending ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
+              <><Loader2 className="w-4 h-4 animate-spin" /> Saving...</>
             ) : phoneSaved ? (
-              <>
-                <Check className="w-4 h-4" /> Saved!
-              </>
+              <><Check className="w-4 h-4" /> Number saved — WhatsApp active! ✅</>
             ) : (
               "Save Number"
             )}
