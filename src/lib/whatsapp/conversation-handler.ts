@@ -64,7 +64,7 @@ export async function handleIncomingMessage(
   if (!user) {
     await sendText(
       from,
-      "Hi! I don't recognise your number. Please sign up at statuscraft.in to connect your WhatsApp. 👋"
+      `Hi! I don't recognise this number (${from}).\n\nIf you're the business owner, go to statuscraft.in → Settings → WhatsApp Bot and save *${from}* as your WhatsApp number. 👋`
     );
     return;
   }
@@ -288,24 +288,13 @@ export async function handleIncomingMessage(
 
     await sendText(
       from,
-      "🎙️ Voice note received! Transcribing and creating your posts... (about 20-30 seconds)"
+      "🎙️ Voice note received! Transcribing and generating 3 posts with images...\n\n⏳ Takes about 60 seconds — I'll send each image directly here as it's ready!"
     );
 
     try {
       const audioBuffer = await downloadMedia(mediaId);
-      const result = await processVoiceNote(audioBuffer, brand.id);
-
-      const postList = result.posts
-        .map((p, i) => `${i + 1}. *${p.headline}*\n_${p.style}_`)
-        .join("\n\n");
-
-      await sendText(
-        from,
-        `✨ *3 posts created from your voice note!*\n\n` +
-          `📝 Transcription: "${result.transcription.slice(0, 100)}${result.transcription.length > 100 ? "…" : ""}"\n\n` +
-          `${postList}\n\n` +
-          `Open StatusCraft to review images and schedule your posts! 🚀`
-      );
+      // Pass `from` so images are sent back to this WhatsApp number as they generate
+      await processVoiceNote(audioBuffer, brand.id, undefined, from);
     } catch (e) {
       console.error("Voice-to-post error:", e);
       await sendText(

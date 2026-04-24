@@ -206,16 +206,16 @@ export default function SettingsPage() {
             <h2 className="font-semibold">WhatsApp Bot</h2>
           </div>
           <div className="mb-4">
-            <label className="block text-sm font-medium mb-1.5">Your WhatsApp Number</label>
+            <label className="block text-sm font-medium mb-1.5">Your Personal WhatsApp Number</label>
             <input
               type="text"
               value={ownerPhone}
               onChange={(e) => setOwnerPhone(e.target.value)}
-              placeholder="91XXXXXXXXXX (country code + number, no spaces)"
+              placeholder="91XXXXXXXXXX (country code + number, no +)"
               className="w-full bg-[#1a1a1d] border border-white/[0.08] rounded-xl px-3 py-2.5 text-sm outline-none focus:border-[#25D366]/40 transition-colors placeholder:text-[#555562]"
             />
             <p className="text-xs text-[#555562] mt-1.5">
-              The bot sends your daily posts to this number. Must match the number registered with Meta.
+              The number YOU use to chat on WhatsApp — the bot will send your daily posts here and recognise your messages.
             </p>
           </div>
           <Button
