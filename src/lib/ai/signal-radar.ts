@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { prisma } from "@/lib/prisma";
 import { SIGNAL_SCORER_SYSTEM, buildSignalScorerPrompt } from "./prompts/signal-scorer";
 import type { SignalType } from "@/generated/prisma/enums";
+import { fetchEntertainmentSignals } from "@/lib/signals/fetchers/entertainment";
 
 const client = new Anthropic();
 
@@ -128,6 +129,13 @@ export async function fetchSignals(): Promise<void> {
       metadata: { league: "IPL", sport: "cricket" },
       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     });
+  }
+
+  // 5. Fetch entertainment signals (Bollywood, celebrities, movies, YouTube)
+  try {
+    await fetchEntertainmentSignals();
+  } catch (e) {
+    console.error("Entertainment signals error:", e);
   }
 
   // Upsert signals to DB

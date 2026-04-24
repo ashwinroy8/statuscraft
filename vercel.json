@@ -1,0 +1,7 @@
+{
+  "crons": [
+    { "path": "/api/cron/deliver-posts", "schedule": "0 7 * * *" },
+    { "path": "/api/cron/generate-festival", "schedule": "0 6 * * *" },
+    { "path": "/api/cron/fetch-entertainment", "schedule": "*/30 * * * *" }
+  ]
+}
