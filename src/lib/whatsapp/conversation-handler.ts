@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { sendText, sendButtons, downloadMedia } from "./client";
+import { sendText, sendImage, sendButtons, downloadMedia } from "./client";
 import { generateDailyContent } from "@/lib/ai/content-generator";
 import { handleStatusReply } from "./auto-responder";
 import { processVoiceNote } from "@/lib/voice/voice-to-post";
@@ -320,7 +320,6 @@ export async function handleIncomingMessage(
             (post.bodyText ? `${post.bodyText}\n` : "") +
             `\n👉 ${post.ctaText}\n\n` +
             `_Download and post as your WhatsApp Status!_`;
-          const { sendImage } = await import("./client");
           await sendImage(from, imageUrl, caption);
         },
         onAllDone: async (postIds) => {
