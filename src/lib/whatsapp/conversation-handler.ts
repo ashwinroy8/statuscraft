@@ -309,8 +309,34 @@ export async function handleIncomingMessage(
 
     try {
       const audioBuffer = await downloadMedia(mediaId);
-      // Pass `from` so images are sent back to this WhatsApp number as they generate
-      await processVoiceNote(audioBuffer, brand.id, undefined, from);
+      const styleEmojis = ["🔥", "✨", "😄"];
+      const styleLabels = ["Bold", "Elegant", "Fun"];
+
+      await processVoiceNote(audioBuffer, brand.id, undefined, {
+        onImageReady: async (index, imageUrl, post) => {
+          const caption =
+            `${styleEmojis[index]} *Post ${index + 1} of 3 — ${styleLabels[index]}*\n\n` +
+            `📰 *${post.headline}*\n` +
+            (post.bodyText ? `${post.bodyText}\n` : "") +
+            `\n👉 ${post.ctaText}\n\n` +
+            `_Download and post as your WhatsApp Status!_`;
+          const { sendImage } = await import("./client");
+          await sendImage(from, imageUrl, caption);
+        },
+        onAllDone: async (postIds) => {
+          const ids = postIds.join(",");
+          await sendButtons(
+            from,
+            "✅ All 3 posts ready!",
+            "Approve to schedule, or open StatusCraft to review.",
+            [
+              { id: `approve_all:${ids}`, title: "✅ Approve All" },
+              { id: `edit_posts:${ids}`, title: "✏️ Edit Posts" },
+              { id: `regenerate:${brand.id}`, title: "🔄 Regenerate" },
+            ]
+          );
+        },
+      });
     } catch (e) {
       console.error("Voice-to-post error:", e);
       await sendText(
