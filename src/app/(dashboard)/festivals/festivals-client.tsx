@@ -162,14 +162,22 @@ function FestivalCard({
           {/* Tags */}
           <div className="flex flex-wrap gap-1.5">
             {festival.category === "BOLLYWOOD" && (
-              <span className="text-xs px-2 py-0.5 rounded-full bg-pink-500/15 text-pink-400 font-medium">
-                🎬 Bollywood
-              </span>
+              <span className="text-xs px-2 py-0.5 rounded-full bg-pink-500/15 text-pink-400 font-medium">🎬 Bollywood</span>
+            )}
+            {festival.category === "COMEDY" && (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-500/15 text-yellow-400 font-medium">😂 Comedy</span>
+            )}
+            {festival.category === "SOUTH" && (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-orange-500/15 text-orange-400 font-medium">🌟 South</span>
             )}
             {festival.category === "CRICKET" && (
-              <span className="text-xs px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-400 font-medium">
-                🏏 Cricket
-              </span>
+              <span className="text-xs px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-400 font-medium">🏏 Cricket</span>
+            )}
+            {festival.category === "MUSIC" && (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-purple-500/15 text-purple-400 font-medium">🎵 Music</span>
+            )}
+            {festival.category === "SPORTS" && (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-green-500/15 text-green-400 font-medium">🥇 Sports</span>
             )}
             {festival.type && festival.type !== "CELEBRITY" && (
               <span className="text-xs px-2 py-0.5 rounded-full bg-white/[0.06] text-[#8b8b9a]">
@@ -256,7 +264,7 @@ function FestivalCard({
   );
 }
 
-type CategoryTab = "all" | "festivals" | "bollywood" | "cricket";
+type CategoryTab = "all" | "festivals" | "bollywood" | "south" | "cricket" | "music" | "sports";
 
 export default function FestivalsClient({ brandId }: Props) {
   const [prefsOpen, setPrefsOpen] = useState(false);
@@ -271,8 +279,11 @@ export default function FestivalsClient({ brandId }: Props) {
   const festivals = festivalsRaw?.filter((f) => {
     if (activeTab === "all") return true;
     if (activeTab === "festivals") return f.type !== "CELEBRITY";
-    if (activeTab === "bollywood") return (f as any).category === "BOLLYWOOD";
+    if (activeTab === "bollywood") return (f as any).category === "BOLLYWOOD" || (f as any).category === "COMEDY";
+    if (activeTab === "south") return (f as any).category === "SOUTH";
     if (activeTab === "cricket") return (f as any).category === "CRICKET";
+    if (activeTab === "music") return (f as any).category === "MUSIC";
+    if (activeTab === "sports") return (f as any).category === "SPORTS";
     return true;
   });
   const { data: prefs } = trpc.festival.getPreferences.useQuery();
@@ -465,7 +476,10 @@ export default function FestivalsClient({ brandId }: Props) {
           { key: "all",       label: "All" },
           { key: "festivals", label: "🎉 Festivals" },
           { key: "bollywood", label: "🎬 Bollywood" },
+          { key: "south",     label: "🌟 South" },
           { key: "cricket",   label: "🏏 Cricket" },
+          { key: "music",     label: "🎵 Music" },
+          { key: "sports",    label: "🥇 Sports" },
         ] as { key: CategoryTab; label: string }[]).map((tab) => (
           <button
             key={tab.key}
