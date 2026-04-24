@@ -15,7 +15,6 @@ export async function handleIncomingMessage(
   phoneNumberId?: string
 ): Promise<void> {
   const from: string = normalisePhone(message.from);
-  const messageId: string = message.id;
   const messageType: string = message.type;
   const contactName: string | undefined = contact?.profile?.name;
 

@@ -10,14 +10,33 @@ export async function GET() {
 
   const dbUser = await prisma.user.findUnique({ where: { email: user.email! } });
   const brands = await prisma.brand.findMany({ where: { userId: user.id } });
-  const brandsByDbUserId = dbUser ? await prisma.brand.findMany({ where: { userId: dbUser.id } }) : [];
+
+  // Fix WhatsApp settings — update phoneNumberId from current env var
+  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID ?? "";
+  let settings = await prisma.settings.findUnique({ where: { userId: user.id } });
+
+  if (settings && phoneNumberId && settings.whatsappBusinessPhoneId !== phoneNumberId) {
+    settings = await prisma.settings.update({
+      where: { userId: user.id },
+      data: {
+        whatsappBusinessPhoneId: phoneNumberId,
+        whatsappConnected: true,
+      },
+    });
+  }
 
   return NextResponse.json({
     supabaseId: user.id,
     email: user.email,
-    dbUser: dbUser ? { id: dbUser.id, email: dbUser.email } : null,
+    dbUser: dbUser ? { id: dbUser.id, email: dbUser.email, phone: dbUser.phone } : null,
     idMatch: dbUser?.id === user.id,
-    brandsBySupabaseId: brands.map(b => ({ id: b.id, name: b.name, onboardingCompleted: b.onboardingCompleted })),
-    brandsByDbUserId: brandsByDbUserId.map(b => ({ id: b.id, name: b.name, onboardingCompleted: b.onboardingCompleted })),
+    brands: brands.map(b => ({ id: b.id, name: b.name, onboardingCompleted: b.onboardingCompleted })),
+    whatsapp: {
+      connected: settings?.whatsappConnected,
+      ownerPhone: settings?.whatsappOwnerPhone,
+      businessPhoneId: settings?.whatsappBusinessPhoneId,
+      envPhoneId: phoneNumberId,
+      fixed: settings?.whatsappBusinessPhoneId === phoneNumberId,
+    },
   });
 }
