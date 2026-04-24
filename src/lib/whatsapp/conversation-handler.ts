@@ -14,53 +14,75 @@ export async function handleIncomingMessage(
   const messageType: string = message.type;
   const contactName: string | undefined = contact?.profile?.name;
 
-  // ── Route customer replies (not owner) to auto-responder ──────────────────
-  // Find the brand this phone number ID belongs to
-  if (phoneNumberId) {
-    const settings = await prisma.settings.findFirst({
-      where: { whatsappBusinessPhoneId: phoneNumberId },
-      include: { user: { include: { brands: { where: { onboardingCompleted: true } } } } },
+  // ── Find who is messaging ──────────────────────────────────────────────────
+  // Priority order:
+  // 1. User.phone matches sender
+  // 2. Settings.whatsappOwnerPhone matches sender
+  // 3. Message came to our phoneNumberId — if ownerPhone not set yet, auto-learn it
+  // 4. Unknown → error with their number so they can paste it into Settings
+
+  let user = await prisma.user.findFirst({ where: { phone: from } });
+  let resolvedByPhoneId = false;
+
+  if (!user) {
+    // Try matching by saved ownerPhone
+    const byOwnerPhone = await prisma.settings.findFirst({
+      where: { whatsappOwnerPhone: from },
+      include: { user: true },
     });
+    if (byOwnerPhone?.user) {
+      user = byOwnerPhone.user;
+      await prisma.user.update({ where: { id: user.id }, data: { phone: from } }).catch(() => {});
+    }
+  }
 
-    if (settings) {
-      const ownerPhone = settings.whatsappOwnerPhone ?? settings.user?.phone;
-      const brand = settings.user?.brands?.[0];
-
-      // If sender is NOT the owner, route to auto-responder
-      if (ownerPhone && from !== ownerPhone && brand) {
-        if (messageType === "text") {
-          const replyText = message.text?.body?.trim() ?? "";
-          await handleStatusReply(from, contactName, replyText, brand.id).catch(
-            (e) => console.error("Auto-responder error:", e)
-          );
-        } else {
-          await sendText(
-            from,
-            `Hi${contactName ? ` ${contactName}` : ""}! Thanks for reaching out to ${brand.name}. 😊 Reply with a text message and we'll get back to you!`
-          );
-        }
-        return;
+  if (!user && phoneNumberId) {
+    // Last resort: find settings by our business phone ID
+    // If ownerPhone is blank, the first person to message is the owner — auto-save them
+    const byPhoneId = await prisma.settings.findFirst({
+      where: { whatsappBusinessPhoneId: phoneNumberId },
+      include: { user: true },
+    });
+    if (byPhoneId?.user) {
+      if (!byPhoneId.whatsappOwnerPhone) {
+        // First-time setup — save this number as owner
+        user = byPhoneId.user;
+        resolvedByPhoneId = true;
+        await prisma.settings.update({
+          where: { userId: user.id },
+          data: { whatsappOwnerPhone: from },
+        }).catch(() => {});
+        await prisma.user.update({ where: { id: user.id }, data: { phone: from } }).catch(() => {});
+      } else if (byPhoneId.whatsappOwnerPhone === from) {
+        user = byPhoneId.user;
       }
     }
   }
 
-  // ── Owner bot flow ─────────────────────────────────────────────────────────
-  // Find user by phone — check User.phone first, then Settings.whatsappOwnerPhone as fallback
-  let user = await prisma.user.findFirst({ where: { phone: from } });
-  if (!user) {
+  // ── Route customer replies (not owner) to auto-responder ──────────────────
+  if (!user && phoneNumberId) {
+    // Sender is a customer (owner is already set, this person is someone else)
     const ownerSettings = await prisma.settings.findFirst({
-      where: { whatsappOwnerPhone: from },
-      include: { user: true },
+      where: { whatsappBusinessPhoneId: phoneNumberId },
+      include: { user: { include: { brands: { where: { onboardingCompleted: true } } } } },
     });
-    if (ownerSettings?.user) {
-      user = ownerSettings.user;
-      // Backfill user.phone so future lookups are faster
-      await prisma.user.update({
-        where: { id: user.id },
-        data: { phone: from },
-      }).catch(() => {}); // ignore unique constraint errors
+    const brand = ownerSettings?.user?.brands?.[0];
+    if (brand) {
+      if (messageType === "text") {
+        const replyText = message.text?.body?.trim() ?? "";
+        await handleStatusReply(from, contactName, replyText, brand.id).catch(
+          (e) => console.error("Auto-responder error:", e)
+        );
+      } else {
+        await sendText(
+          from,
+          `Hi${contactName ? ` ${contactName}` : ""}! Thanks for reaching out to ${brand.name}. 😊 Reply with a text message and we'll get back to you!`
+        );
+      }
+      return;
     }
   }
+
   if (!user) {
     await sendText(
       from,
