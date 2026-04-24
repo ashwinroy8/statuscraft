@@ -4,83 +4,76 @@ import { generateDailyContent } from "@/lib/ai/content-generator";
 import { handleStatusReply } from "./auto-responder";
 import { processVoiceNote } from "@/lib/voice/voice-to-post";
 
+// Strip +, spaces, dashes so "91 810-810 5860" === "918108105860"
+function normalisePhone(p: string): string {
+  return p.replace(/[\s+\-()]/g, "");
+}
+
 export async function handleIncomingMessage(
   message: any,
   contact: any,
   phoneNumberId?: string
 ): Promise<void> {
-  const from: string = message.from;
+  const from: string = normalisePhone(message.from);
   const messageId: string = message.id;
   const messageType: string = message.type;
   const contactName: string | undefined = contact?.profile?.name;
 
   // ── Find who is messaging ──────────────────────────────────────────────────
-  // Priority order:
-  // 1. User.phone matches sender
-  // 2. Settings.whatsappOwnerPhone matches sender
-  // 3. Message came to our phoneNumberId — if ownerPhone not set yet, auto-learn it
-  // 4. Unknown → error with their number so they can paste it into Settings
-
   let user = await prisma.user.findFirst({ where: { phone: from } });
-  let resolvedByPhoneId = false;
 
   if (!user) {
-    // Try matching by saved ownerPhone
-    const byOwnerPhone = await prisma.settings.findFirst({
-      where: { whatsappOwnerPhone: from },
+    // Try all settings records and compare normalised ownerPhone
+    const allSettings = await prisma.settings.findMany({
+      where: { whatsappOwnerPhone: { not: null } },
       include: { user: true },
     });
-    if (byOwnerPhone?.user) {
-      user = byOwnerPhone.user;
+    const match = allSettings.find(
+      (s) => normalisePhone(s.whatsappOwnerPhone ?? "") === from
+    );
+    if (match?.user) {
+      user = match.user;
+      // Normalise saved number and backfill user.phone
+      await prisma.settings.update({
+        where: { userId: user.id },
+        data: { whatsappOwnerPhone: from },
+      }).catch(() => {});
       await prisma.user.update({ where: { id: user.id }, data: { phone: from } }).catch(() => {});
     }
   }
 
   if (!user) {
-    // Last resort: find any connected settings record.
-    // whatsappBusinessPhoneId may be empty if env var wasn't set when user first saved.
-    // So we search by phoneNumberId OR whatsappConnected=true as broadest fallback.
-    const byPhoneId = await prisma.settings.findFirst({
-      where: {
-        OR: [
-          { whatsappBusinessPhoneId: phoneNumberId ?? "" },
-          { whatsappConnected: true },
-        ],
-      },
+    // No ownerPhone saved at all yet — find any connected account and claim it
+    const anyConnected = await prisma.settings.findFirst({
+      where: { whatsappConnected: true },
       include: { user: true },
     });
-
-    if (byPhoneId?.user) {
-      const savedOwner = byPhoneId.whatsappOwnerPhone ?? byPhoneId.user.phone;
-      if (!savedOwner || savedOwner === from) {
-        // No owner set yet, OR this IS the owner — claim it
-        user = byPhoneId.user;
-        resolvedByPhoneId = true;
-        const envPhoneId = process.env.WHATSAPP_PHONE_NUMBER_ID ?? phoneNumberId ?? "";
-        await prisma.settings.update({
-          where: { userId: user.id },
-          data: { whatsappOwnerPhone: from, whatsappBusinessPhoneId: envPhoneId, whatsappConnected: true },
-        }).catch(() => {});
-        await prisma.user.update({ where: { id: user.id }, data: { phone: from } }).catch(() => {});
-      } else {
-        // Owner is set but this is a DIFFERENT person — they're a customer
-        const brand = await prisma.brand.findFirst({
-          where: { userId: byPhoneId.user.id, onboardingCompleted: true },
-        });
-        if (brand) {
-          if (messageType === "text") {
-            const replyText = message.text?.body?.trim() ?? "";
-            await handleStatusReply(from, contactName, replyText, brand.id).catch(
-              (e) => console.error("Auto-responder error:", e)
-            );
-          } else {
-            await sendText(
-              from,
-              `Hi${contactName ? ` ${contactName}` : ""}! Thanks for reaching out to ${brand.name}. 😊 Reply with a text message and we'll get back to you!`
-            );
-          }
-          return;
+    if (anyConnected?.user && !anyConnected.whatsappOwnerPhone) {
+      user = anyConnected.user;
+      const envPhoneId = process.env.WHATSAPP_PHONE_NUMBER_ID ?? phoneNumberId ?? "";
+      await prisma.settings.update({
+        where: { userId: user.id },
+        data: { whatsappOwnerPhone: from, whatsappBusinessPhoneId: envPhoneId },
+      }).catch(() => {});
+      await prisma.user.update({ where: { id: user.id }, data: { phone: from } }).catch(() => {});
+    } else if (anyConnected?.user && anyConnected.whatsappOwnerPhone) {
+      // Owner IS set — this is a customer messaging in
+      const brand = await prisma.brand.findFirst({
+        where: { userId: anyConnected.user.id, onboardingCompleted: true },
+      });
+      if (brand) {
+        if (messageType === "text") {
+          const replyText = message.text?.body?.trim() ?? "";
+          await handleStatusReply(from, contactName, replyText, brand.id).catch(
+            (e) => console.error("Auto-responder error:", e)
+          );
+        } else {
+          await sendText(
+            from,
+            `Hi${contactName ? ` ${contactName}` : ""}! Thanks for reaching out to ${brand.name}. 😊 Reply with a text message and we'll get back to you!`
+          );
         }
+        return;
       }
     }
   }
