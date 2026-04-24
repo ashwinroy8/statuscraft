@@ -8,25 +8,28 @@ export interface TranscriptionResult {
 }
 
 // Map any input mime/extension to one Groq accepts
-function normaliseAudio(buffer: Buffer, originalName = "audio.ogg"): { blob: Blob; filename: string } {
-  const ext = originalName.split(".").pop()?.toLowerCase() ?? "ogg";
-
-  // AAC and M4A are the same codec — Groq accepts m4a
-  if (ext === "aac") {
-    const ab = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer;
-    return { blob: new Blob([ab], { type: "audio/m4a" }), filename: "audio.m4a" };
-  }
-
-  // Supported types pass through unchanged
-  const supported = ["flac", "mp3", "mp4", "mpeg", "mpga", "m4a", "ogg", "opus", "wav", "webm"];
-  const safExt = supported.includes(ext) ? ext : "ogg";
-  const mimeMap: Record<string, string> = {
-    flac: "audio/flac", mp3: "audio/mpeg", mp4: "audio/mp4", mpeg: "audio/mpeg",
-    mpga: "audio/mpeg", m4a: "audio/m4a", ogg: "audio/ogg", opus: "audio/opus",
-    wav: "audio/wav", webm: "audio/webm",
-  };
+function normaliseAudio(buffer: Buffer, originalName = ""): { blob: Blob; filename: string } {
+  const ext = originalName.split(".").pop()?.toLowerCase() ?? "";
   const ab = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer;
-  return { blob: new Blob([ab], { type: mimeMap[safExt] ?? "audio/ogg" }), filename: `audio.${safExt}` };
+
+  const mimeMap: Record<string, { mime: string; filename: string }> = {
+    mp3:  { mime: "audio/mpeg",  filename: "audio.mp3"  },
+    mpeg: { mime: "audio/mpeg",  filename: "audio.mp3"  },
+    mpga: { mime: "audio/mpeg",  filename: "audio.mp3"  },
+    mp4:  { mime: "audio/mp4",   filename: "audio.mp4"  },
+    m4a:  { mime: "audio/mp4",   filename: "audio.mp4"  },
+    aac:  { mime: "audio/mp4",   filename: "audio.mp4"  }, // AAC repackaged as mp4
+    ogg:  { mime: "audio/ogg",   filename: "audio.ogg"  },
+    opus: { mime: "audio/ogg",   filename: "audio.ogg"  },
+    wav:  { mime: "audio/wav",   filename: "audio.wav"  },
+    webm: { mime: "audio/webm",  filename: "audio.webm" },
+    flac: { mime: "audio/flac",  filename: "audio.flac" },
+  };
+
+  const mapped = mimeMap[ext];
+  // If extension is known, use it; otherwise default to mp4 (most universal)
+  const { mime, filename } = mapped ?? { mime: "audio/mp4", filename: "audio.mp4" };
+  return { blob: new Blob([ab], { type: mime }), filename };
 }
 
 export async function transcribeAudio(audioBuffer: Buffer, originalName?: string): Promise<TranscriptionResult> {
