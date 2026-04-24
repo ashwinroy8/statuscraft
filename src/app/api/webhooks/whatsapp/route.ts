@@ -24,6 +24,8 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   let body: any;
 
+  console.log("[WA webhook] POST received at", new Date().toISOString());
+
   const appSecret = process.env.WHATSAPP_APP_SECRET;
   if (appSecret) {
     const rawBody = await req.text();
