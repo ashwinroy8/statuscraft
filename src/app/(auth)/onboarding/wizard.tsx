@@ -351,7 +351,7 @@ export default function OnboardingWizard({ userId, email }: WizardProps) {
       onboardingCompleted: true,
     });
     setLoading(false);
-    router.push("/");
+    router.push("/dashboard");
   }
 
   // When ctaWebsite changes in Step 1, keep websiteUrl in sync
