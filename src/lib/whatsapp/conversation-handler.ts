@@ -45,22 +45,23 @@ export async function handleIncomingMessage(
   }
 
   // ── Owner bot flow ─────────────────────────────────────────────────────────
-  // Find user by phone number
-  const user = await prisma.user.findFirst({ where: { phone: from } });
+  // Find user by phone — check User.phone first, then Settings.whatsappOwnerPhone as fallback
+  let user = await prisma.user.findFirst({ where: { phone: from } });
   if (!user) {
-    // Unknown sender — try to find a brand via any settings with this phone as owner
-    const fallbackSettings = await prisma.settings.findFirst({
+    const ownerSettings = await prisma.settings.findFirst({
       where: { whatsappOwnerPhone: from },
-      include: { user: { include: { brands: { where: { onboardingCompleted: true }, take: 1 } } } },
+      include: { user: true },
     });
-    const fallbackBrand = fallbackSettings?.user?.brands?.[0];
-    if (fallbackBrand && messageType === "text") {
-      const replyText = message.text?.body?.trim() ?? "";
-      await handleStatusReply(from, contactName, replyText, fallbackBrand.id).catch(
-        (e) => console.error("Fallback auto-responder error:", e)
-      );
-      return;
+    if (ownerSettings?.user) {
+      user = ownerSettings.user;
+      // Backfill user.phone so future lookups are faster
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { phone: from },
+      }).catch(() => {}); // ignore unique constraint errors
     }
+  }
+  if (!user) {
     await sendText(
       from,
       "Hi! I don't recognise your number. Please sign up at statuscraft.in to connect your WhatsApp. 👋"
