@@ -72,7 +72,7 @@ export function Sidebar({ userEmail }: SidebarProps) {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
+      <nav className="flex-1 px-3 py-2 space-y-0.5 overflow-y-auto scrollbar-thin">
         {NAV_ITEMS.map((item) => {
           const Icon = item.icon;
           const isActive = pathname === item.href;
@@ -81,7 +81,7 @@ export function Sidebar({ userEmail }: SidebarProps) {
               key={item.href}
               href={item.href}
               className={cn(
-                "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-colors relative group",
+                "flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition-colors relative group",
                 isActive
                   ? "bg-white/[0.07] text-white"
                   : "text-[#8b8b9a] hover:text-white hover:bg-white/[0.04]"
