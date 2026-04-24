@@ -161,6 +161,73 @@ export async function handleIncomingMessage(
       await upsertSession(user.id, brand.id, from, "EDITING_POST", stateData);
       return;
     }
+
+    // ── Main menu button replies ──────────────────────────────────────────
+    if (replyId === "cmd:today") {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const posts = await prisma.post.findMany({
+        where: { brandId: brand.id, createdAt: { gte: today, lt: tomorrow } },
+        orderBy: { scheduledAt: "asc" },
+        take: 5,
+      });
+      if (!posts.length) {
+        await sendText(
+          from,
+          "📅 No posts for today yet.\n\nSend me a *voice note* or type 'post [description]' to create one! 🎙️"
+        );
+      } else {
+        const summary = posts
+          .map(
+            (p, i) =>
+              `${i + 1}. *${p.headline ?? "Untitled"}* — ${p.status}${
+                p.scheduledAt
+                  ? " @ " +
+                    new Date(p.scheduledAt).toLocaleTimeString("en-IN", {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })
+                  : ""
+              }`
+          )
+          .join("\n");
+        await sendText(from, `📅 *Today's posts:*\n\n${summary}`);
+      }
+      return;
+    }
+
+    if (replyId === "cmd:stats") {
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      const [totalPosts, analytics] = await Promise.all([
+        prisma.post.count({
+          where: { brandId: brand.id, status: "SENT", createdAt: { gte: thirtyDaysAgo } },
+        }),
+        prisma.postAnalytics.aggregate({
+          where: { post: { brandId: brand.id } },
+          _sum: { views: true, replies: true },
+        }),
+      ]);
+      await sendText(
+        from,
+        `📊 *Your stats (last 30 days):*\n\n` +
+          `✅ Posts sent: ${totalPosts}\n` +
+          `👁 Total views: ${analytics._sum.views ?? 0}\n` +
+          `💬 Total replies: ${analytics._sum.replies ?? 0}\n\n` +
+          `For detailed analytics, visit statuscraft.in 📈`
+      );
+      return;
+    }
+
+    if (replyId === "cmd:festival") {
+      await sendText(
+        from,
+        `🎉 *Festival Post*\n\nTell me which festival or celebrity birthday you want a post for!\n\nExample: "Diwali post" or "Virat Kohli birthday post"`
+      );
+      await upsertSession(user.id, brand.id, from, "FESTIVAL_REQUEST", {});
+      return;
+    }
   }
 
   // ── Handle text messages ───────────────────────────────────────────────────
