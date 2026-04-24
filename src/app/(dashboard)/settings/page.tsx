@@ -83,21 +83,23 @@ export default function SettingsPage() {
           </div>
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-[#8b8b9a]">
-                {settings?.whatsappConnected
-                  ? `Connected · Phone ID: ${settings.whatsappBusinessPhoneId ?? "—"}`
-                  : "Not connected"}
-              </p>
+              {settings?.whatsappConnected ? (
+                <>
+                  <p className="text-sm text-white font-medium">Connected ✅</p>
+                  <p className="text-xs text-[#8b8b9a] mt-0.5">
+                    Number: {settings.whatsappOwnerPhone ?? "—"} · Phone ID: {settings.whatsappBusinessPhoneId ?? "—"}
+                  </p>
+                </>
+              ) : (
+                <p className="text-sm text-[#8b8b9a]">
+                  Enter your WhatsApp number below to activate the bot
+                </p>
+              )}
             </div>
             <Badge variant={settings?.whatsappConnected ? "green" : "outline"}>
               {settings?.whatsappConnected ? "Connected" : "Disconnected"}
             </Badge>
           </div>
-          {!settings?.whatsappConnected && (
-            <Button variant="secondary" size="sm" className="mt-3">
-              Connect WhatsApp Business API
-            </Button>
-          )}
         </div>
 
         {/* Posting Schedule */}

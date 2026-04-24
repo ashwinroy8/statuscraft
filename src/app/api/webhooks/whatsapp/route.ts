@@ -1,10 +1,11 @@
 import { type NextRequest, NextResponse } from "next/server";
+import { createHmac } from "crypto";
 import {
   processWhatsAppWebhook,
   verifyWhatsAppWebhook,
 } from "@/lib/whatsapp/client";
 
-// Webhook verification (GET)
+// Webhook verification (GET) — Meta calls this when you register the webhook URL
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const mode = searchParams.get("hub.mode") ?? "";
@@ -21,12 +22,34 @@ export async function GET(req: NextRequest) {
 
 // Incoming messages/status updates (POST)
 export async function POST(req: NextRequest) {
-  const body = await req.json();
+  // Verify signature using App Secret (prevents spoofed requests)
+  const appSecret = process.env.WHATSAPP_APP_SECRET;
+  if (appSecret) {
+    const rawBody = await req.text();
+    const signature = req.headers.get("x-hub-signature-256") ?? "";
+    const expectedSig =
+      "sha256=" +
+      createHmac("sha256", appSecret).update(rawBody).digest("hex");
 
-  try {
-    await processWhatsAppWebhook(body);
-  } catch (e) {
-    console.error("WhatsApp webhook error:", e);
+    if (signature !== expectedSig) {
+      console.error("WhatsApp webhook signature mismatch");
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const body = JSON.parse(rawBody);
+    try {
+      await processWhatsAppWebhook(body);
+    } catch (e) {
+      console.error("WhatsApp webhook error:", e);
+    }
+  } else {
+    // No app secret configured — skip verification (dev mode)
+    const body = await req.json();
+    try {
+      await processWhatsAppWebhook(body);
+    } catch (e) {
+      console.error("WhatsApp webhook error:", e);
+    }
   }
 
   // Always return 200 to acknowledge receipt
