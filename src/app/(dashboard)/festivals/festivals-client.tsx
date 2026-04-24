@@ -161,7 +161,17 @@ function FestivalCard({
 
           {/* Tags */}
           <div className="flex flex-wrap gap-1.5">
-            {festival.type && (
+            {festival.category === "BOLLYWOOD" && (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-pink-500/15 text-pink-400 font-medium">
+                🎬 Bollywood
+              </span>
+            )}
+            {festival.category === "CRICKET" && (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-400 font-medium">
+                🏏 Cricket
+              </span>
+            )}
+            {festival.type && festival.type !== "CELEBRITY" && (
               <span className="text-xs px-2 py-0.5 rounded-full bg-white/[0.06] text-[#8b8b9a]">
                 {festival.type.charAt(0) + festival.type.slice(1).toLowerCase()}
               </span>
@@ -246,15 +256,27 @@ function FestivalCard({
   );
 }
 
+type CategoryTab = "all" | "festivals" | "bollywood" | "cricket";
+
 export default function FestivalsClient({ brandId }: Props) {
   const [prefsOpen, setPrefsOpen] = useState(false);
   const [localReligions, setLocalReligions] = useState<string[]>([]);
   const [localRegions, setLocalRegions] = useState<string[]>([]);
   const [autoPost, setAutoPost] = useState(false);
   const [prefsSaved, setPrefsSaved] = useState(false);
+  const [activeTab, setActiveTab] = useState<CategoryTab>("all");
 
-  const { data: festivals, isLoading } = trpc.festival.upcoming.useQuery();
+  const { data: festivalsRaw, isLoading } = trpc.festival.upcoming.useQuery();
+
+  const festivals = festivalsRaw?.filter((f) => {
+    if (activeTab === "all") return true;
+    if (activeTab === "festivals") return f.type !== "CELEBRITY";
+    if (activeTab === "bollywood") return (f as any).category === "BOLLYWOOD";
+    if (activeTab === "cricket") return (f as any).category === "CRICKET";
+    return true;
+  });
   const { data: prefs } = trpc.festival.getPreferences.useQuery();
+  // (festivals is derived from festivalsRaw above)
 
   // Populate local state once prefs load
   useEffect(() => {
@@ -436,6 +458,28 @@ export default function FestivalsClient({ brandId }: Props) {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Category Tab Bar */}
+      <div className="flex gap-1 mb-6 bg-[#16161a] border border-[#2a2a35] p-1 rounded-xl w-fit">
+        {([
+          { key: "all",       label: "All" },
+          { key: "festivals", label: "🎉 Festivals" },
+          { key: "bollywood", label: "🎬 Bollywood" },
+          { key: "cricket",   label: "🏏 Cricket" },
+        ] as { key: CategoryTab; label: string }[]).map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+              activeTab === tab.key
+                ? "bg-white/[0.08] text-white"
+                : "text-[#8b8b9a] hover:text-white"
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
 
       {/* Festival list */}
       {isLoading ? (
