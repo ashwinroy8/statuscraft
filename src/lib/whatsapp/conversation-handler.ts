@@ -173,7 +173,7 @@ export async function handleIncomingMessage(
       const posts = await prisma.post.findMany({
         where: { brandId: brand.id, createdAt: { gte: today, lt: tomorrow } },
         orderBy: { scheduledAt: "asc" },
-        take: 5,
+        take: 3,
       });
       if (!posts.length) {
         await sendText(
@@ -181,22 +181,54 @@ export async function handleIncomingMessage(
           "📅 No posts for today yet.\n\nSend me a *voice note* or type 'post [description]' to create one! 🎙️"
         );
       } else {
-        const summary = posts
-          .map(
-            (p, i) =>
-              `${i + 1}. *${p.headline ?? "Untitled"}* — ${p.status}${
-                p.scheduledAt
-                  ? " @ " +
-                    new Date(p.scheduledAt).toLocaleTimeString("en-IN", {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })
-                  : ""
-              }`
-          )
-          .join("\n");
-        await sendText(from, `📅 *Today's posts:*\n\n${summary}`);
+        await sendText(from, `📅 *Today's ${posts.length} post${posts.length > 1 ? "s" : ""}:*\n\nSending each one now 👇`);
+        for (let i = 0; i < posts.length; i++) {
+          const p = posts[i];
+          const scheduleStr = p.scheduledAt
+            ? new Date(p.scheduledAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })
+            : "unscheduled";
+          const caption =
+            `*${i + 1}. ${p.headline ?? "Untitled"}*\n\n` +
+            `${p.bodyText ? p.bodyText.slice(0, 200) + "\n\n" : ""}` +
+            `${p.ctaText ? "👉 " + p.ctaText + "\n\n" : ""}` +
+            `⏰ ${scheduleStr} · Status: ${p.status}`;
+
+          if (p.imageUrl) {
+            await sendImage(from, p.imageUrl, caption);
+          } else {
+            await sendText(from, caption + "\n\n_(image generating, check dashboard)_");
+          }
+
+          // Send approve/reject buttons for draft posts
+          if (p.status === "DRAFT") {
+            await sendButtons(
+              from,
+              `Post ${i + 1} action`,
+              "What would you like to do with this post?",
+              [
+                { id: `approve:${p.id}`, title: "✅ Approve" },
+                { id: `reject:${p.id}`, title: "❌ Discard" },
+              ]
+            );
+          }
+        }
       }
+      return;
+    }
+
+    // Approve a specific post
+    if (replyId.startsWith("approve:")) {
+      const postId = replyId.replace("approve:", "");
+      await prisma.post.update({ where: { id: postId }, data: { status: "SCHEDULED" } });
+      await sendText(from, "✅ Post approved and scheduled!");
+      return;
+    }
+
+    // Reject/discard a specific post
+    if (replyId.startsWith("reject:")) {
+      const postId = replyId.replace("reject:", "");
+      await prisma.post.delete({ where: { id: postId } });
+      await sendText(from, "🗑️ Post discarded.");
       return;
     }
 
