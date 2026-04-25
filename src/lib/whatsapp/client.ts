@@ -70,6 +70,26 @@ export async function sendButtons(
   });
 }
 
+// Send image + caption + action buttons as a single message bubble
+export async function sendImageWithButtons(
+  to: string,
+  imageUrl: string,
+  bodyText: string,
+  buttons: Array<{ id: string; title: string }>
+) {
+  return sendInteractive(to, {
+    type: "button",
+    header: { type: "image", image: { link: imageUrl } },
+    body: { text: bodyText },
+    action: {
+      buttons: buttons.map(b => ({
+        type: "reply",
+        reply: { id: b.id, title: b.title },
+      })),
+    },
+  });
+}
+
 export async function sendList(
   to: string,
   headerText: string,

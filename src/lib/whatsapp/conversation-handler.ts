@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { sendText, sendImage, sendButtons, downloadMedia } from "./client";
+import { sendText, sendImage, sendImageWithButtons, sendButtons, downloadMedia } from "./client";
 import { generateDailyContent } from "@/lib/ai/content-generator";
 import { handleStatusReply } from "./auto-responder";
 import { processVoiceNote } from "@/lib/voice/voice-to-post";
@@ -191,25 +191,23 @@ export async function handleIncomingMessage(
             `*${i + 1}. ${p.headline ?? "Untitled"}*\n\n` +
             `${p.bodyText ? p.bodyText.slice(0, 200) + "\n\n" : ""}` +
             `${p.ctaText ? "👉 " + p.ctaText + "\n\n" : ""}` +
-            `⏰ ${scheduleStr} · Status: ${p.status}`;
+            `⏰ ${scheduleStr}`;
 
-          if (p.imageUrl) {
+          const draftButtons = [
+            { id: `approve:${p.id}`, title: "✅ Approve" },
+            { id: `reject:${p.id}`, title: "❌ Discard" },
+          ];
+
+          if (p.imageUrl && p.status === "DRAFT") {
+            // Image + content + approve/discard buttons — all in one bubble
+            await sendImageWithButtons(from, p.imageUrl, caption, draftButtons);
+          } else if (p.imageUrl) {
             await sendImage(from, p.imageUrl, caption);
+          } else if (p.status === "DRAFT") {
+            // No image yet — text + buttons
+            await sendButtons(from, `Post ${i + 1}`, caption + "\n\n_(image still generating)_", draftButtons);
           } else {
-            await sendText(from, caption + "\n\n_(image generating, check dashboard)_");
-          }
-
-          // Send approve/reject buttons for draft posts
-          if (p.status === "DRAFT") {
-            await sendButtons(
-              from,
-              `Post ${i + 1} action`,
-              "What would you like to do with this post?",
-              [
-                { id: `approve:${p.id}`, title: "✅ Approve" },
-                { id: `reject:${p.id}`, title: "❌ Discard" },
-              ]
-            );
+            await sendText(from, caption);
           }
         }
       }
