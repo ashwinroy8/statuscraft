@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
-import { Zap, Phone, Mail, ArrowRight, Loader2 } from "lucide-react";
+import { Zap, Phone, ArrowRight, Loader2 } from "lucide-react";
 
 export default function LoginPage() {
   const [mode, setMode] = useState<"options" | "phone" | "otp">("options");
@@ -32,12 +32,14 @@ export default function LoginPage() {
   async function sendOtp() {
     setLoading(true);
     setError("");
-    const formatted = phone.startsWith("+") ? phone : `+91${phone}`;
-    const { error } = await supabase.auth.signInWithOtp({
-      phone: formatted,
+    const res = await fetch("/api/auth/send-otp", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ phone }),
     });
-    if (error) {
-      setError(error.message);
+    const json = await res.json();
+    if (!res.ok) {
+      setError(json.error ?? "Failed to send OTP");
     } else {
       setMode("otp");
     }
@@ -47,13 +49,17 @@ export default function LoginPage() {
   async function verifyOtp() {
     setLoading(true);
     setError("");
-    const formatted = phone.startsWith("+") ? phone : `+91${phone}`;
-    const { error } = await supabase.auth.verifyOtp({
-      phone: formatted,
-      token: otp,
-      type: "sms",
+    const res = await fetch("/api/auth/verify-otp", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ phone, code: otp }),
     });
-    if (error) setError(error.message);
+    const json = await res.json();
+    if (!res.ok) {
+      setError(json.error ?? "Verification failed");
+    } else {
+      window.location.href = json.redirectUrl;
+    }
     setLoading(false);
   }
 

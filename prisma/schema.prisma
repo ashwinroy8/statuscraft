@@ -436,6 +436,25 @@ model Order {
   @@index([paymentStatus])
 }
 
+// ─── WhatsApp Onboarding & Phone OTP ─────────────────────────────────────────
+
+model OnboardingSession {
+  phone     String   @id
+  step      String   @default("WELCOME")
+  data      Json     @default("{}")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model OtpCode {
+  phone     String   @id
+  code      String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([expiresAt])
+}
+
 // ─── Feature 3: Watermark Analytics ─────────────────────────────────────────
 
 model WatermarkImpression {

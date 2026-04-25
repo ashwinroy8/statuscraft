@@ -3,6 +3,7 @@ import { sendText, sendImage, sendImageWithButtons, sendButtons, downloadMedia }
 import { generateDailyContent } from "@/lib/ai/content-generator";
 import { handleStatusReply } from "./auto-responder";
 import { processVoiceNote } from "@/lib/voice/voice-to-post";
+import { handleOnboardingMessage } from "./onboarding-handler";
 
 // Strip +, spaces, dashes so "91 810-810 5860" === "918108105860"
 function normalisePhone(p: string): string {
@@ -17,6 +18,13 @@ export async function handleIncomingMessage(
   const from: string = normalisePhone(message.from);
   const messageType: string = message.type;
   const contactName: string | undefined = contact?.profile?.name;
+
+  // ── Check for in-progress WhatsApp onboarding ─────────────────────────────
+  const onboardingSession = await prisma.onboardingSession.findUnique({ where: { phone: from } });
+  if (onboardingSession) {
+    await handleOnboardingMessage(from, messageType, message, contactName);
+    return;
+  }
 
   // ── Find who is messaging ──────────────────────────────────────────────────
   let user = await prisma.user.findFirst({ where: { phone: from } });
@@ -78,10 +86,7 @@ export async function handleIncomingMessage(
   }
 
   if (!user) {
-    await sendText(
-      from,
-      `Hi! I don't recognise this number (${from}).\n\nIf you're the business owner, go to statuscraft.in → Settings → WhatsApp Bot and save *${from}* as your WhatsApp number. 👋`
-    );
+    await handleOnboardingMessage(from, messageType, message, contactName);
     return;
   }
 
