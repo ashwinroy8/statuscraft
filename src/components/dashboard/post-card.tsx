@@ -19,7 +19,7 @@ import {
   BarChart2,
 } from "lucide-react";
 import { trpc } from "@/lib/trpc/client";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 
 interface PostCardProps {
   post: {
@@ -73,6 +73,8 @@ export function PostCard({ post, onAction, index = 0 }: PostCardProps) {
   const [approving, setApproving] = useState(false);
   const [rejecting, setRejecting] = useState(false);
   const [generatingImage, setGeneratingImage] = useState(false);
+  const [localImageUrl, setLocalImageUrl] = useState(post.imageUrl);
+  const autoGenerateAttempted = useRef(false);
   const [showLogViews, setShowLogViews] = useState(false);
   const [viewsInput, setViewsInput] = useState(
     String(post.analytics?.views ?? "")
@@ -81,6 +83,26 @@ export function PostCard({ post, onAction, index = 0 }: PostCardProps) {
     String(post.analytics?.replies ?? "")
   );
   const [localAnalytics, setLocalAnalytics] = useState(post.analytics);
+
+  // Auto-generate image for draft posts that have no image yet
+  useEffect(() => {
+    if (!localImageUrl && post.status === "DRAFT" && !autoGenerateAttempted.current) {
+      autoGenerateAttempted.current = true;
+      setGeneratingImage(true);
+      fetch("/api/media/generate-image", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ postId: post.id }),
+      })
+        .then((r) => r.json())
+        .then((data) => {
+          if (data.imageUrl) setLocalImageUrl(data.imageUrl);
+        })
+        .catch(console.error)
+        .finally(() => setGeneratingImage(false));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const approve = trpc.post.approve.useMutation({ onSuccess: onAction });
   const reject = trpc.post.reject.useMutation({ onSuccess: onAction });
@@ -110,13 +132,18 @@ export function PostCard({ post, onAction, index = 0 }: PostCardProps) {
 
   async function handleGenerateImage() {
     setGeneratingImage(true);
-    await fetch("/api/media/generate-image", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ postId: post.id }),
-    });
+    try {
+      const r = await fetch("/api/media/generate-image", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ postId: post.id }),
+      });
+      const data = await r.json();
+      if (data.imageUrl) setLocalImageUrl(data.imageUrl);
+    } catch (e) {
+      console.error(e);
+    }
     setGeneratingImage(false);
-    onAction?.();
   }
 
   function handleLogSubmit() {
@@ -137,30 +164,29 @@ export function PostCard({ post, onAction, index = 0 }: PostCardProps) {
     >
       <div className="flex gap-0">
         {/* Image preview */}
-        <div className="w-[100px] flex-shrink-0 bg-[#1a1a1d] relative">
-          {post.imageUrl ? (
+        <div className="w-[120px] flex-shrink-0 bg-[#1a1a1d] relative overflow-hidden rounded-l-2xl">
+          {localImageUrl ? (
             <img
-              src={post.imageUrl}
+              src={localImageUrl}
               alt={post.headline ?? "Post"}
               className="w-full h-full object-cover"
-              style={{ aspectRatio: "9/16", maxHeight: "178px" }}
+              style={{ aspectRatio: "9/16", maxHeight: "200px" }}
             />
+          ) : generatingImage ? (
+            <div className="flex flex-col items-center justify-center h-full min-h-[200px] gap-2">
+              <Loader2 className="w-5 h-5 text-[#25D366] animate-spin" />
+              <span className="text-[9px] text-[#555562] text-center px-1 leading-tight">Creating image…</span>
+            </div>
           ) : (
-            <div className="flex flex-col items-center justify-center h-full min-h-[178px] gap-2">
+            <div className="flex flex-col items-center justify-center h-full min-h-[200px] gap-2">
               <ImageIcon className="w-6 h-6 text-[#555562]" />
-              {post.status === "DRAFT" && (
-                <button
-                  onClick={handleGenerateImage}
-                  disabled={generatingImage}
-                  className="text-[10px] text-[#25D366] hover:underline"
-                >
-                  {generatingImage ? (
-                    <Loader2 className="w-3 h-3 animate-spin" />
-                  ) : (
-                    "Generate"
-                  )}
-                </button>
-              )}
+              <button
+                onClick={handleGenerateImage}
+                disabled={generatingImage}
+                className="text-[10px] text-[#25D366] hover:underline"
+              >
+                Generate
+              </button>
             </div>
           )}
         </div>

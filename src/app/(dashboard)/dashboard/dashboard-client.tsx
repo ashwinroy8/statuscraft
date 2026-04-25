@@ -10,18 +10,25 @@ import {
   MessageSquare,
   Zap,
   Radio,
-  RefreshCw,
   Loader2,
   TrendingUp,
   CalendarDays,
+  RefreshCw,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { format } from "date-fns";
 
+interface DayGroup {
+  dateStr: string;
+  label: string;
+  posts: any[];
+}
+
 interface Props {
   brand: any;
-  todayPosts: any[];
+  postsByDay: DayGroup[];
+  todayDateStr: string;
   stats: {
     totalPosts: number;
     sentPosts: number;
@@ -42,9 +49,13 @@ const SIGNAL_TYPE_COLORS: Record<string, string> = {
   SPORTS: "text-orange-400",
 };
 
-export default function DashboardClient({ brand, todayPosts: initialPosts, stats, signals }: Props) {
-  const [posts, setPosts] = useState(initialPosts);
+export default function DashboardClient({ brand, postsByDay: initialPostsByDay, todayDateStr, stats, signals }: Props) {
+  const [postsByDay, setPostsByDay] = useState(initialPostsByDay);
   const [generating, setGenerating] = useState(false);
+  const [discarding, setDiscarding] = useState(false);
+
+  const todayGroup = postsByDay.find((g) => g.dateStr === todayDateStr);
+  const todayDrafts = todayGroup?.posts.filter((p) => p.status === "DRAFT") ?? [];
 
   async function generateContent() {
     setGenerating(true);
@@ -64,9 +75,32 @@ export default function DashboardClient({ brand, todayPosts: initialPosts, stats
     setGenerating(false);
   }
 
-  const draftPosts = posts.filter((p) => p.status === "DRAFT");
-  const scheduledPosts = posts.filter((p) => p.status === "SCHEDULED");
-  const sentPosts = posts.filter((p) => p.status === "SENT");
+  async function tryDifferentPosts() {
+    setDiscarding(true);
+    try {
+      // Delete today's drafts
+      await fetch("/api/posts/discard-drafts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ brandId: brand.id, dateStr: todayDateStr }),
+      });
+      // Generate a fresh set
+      await fetch("/api/cron/generate-content", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer local-dev-secret`,
+        },
+        body: JSON.stringify({ brandId: brand.id }),
+      });
+      window.location.reload();
+    } catch (e) {
+      console.error(e);
+    }
+    setDiscarding(false);
+  }
+
+  const hasTodayContent = (todayGroup?.posts.length ?? 0) > 0;
 
   return (
     <div className="p-8 max-w-[1400px] mx-auto">
@@ -86,18 +120,35 @@ export default function DashboardClient({ brand, todayPosts: initialPosts, stats
             {format(new Date(), "EEEE, MMMM d")}
           </p>
         </div>
-        <Button
-          variant="primary"
-          onClick={generateContent}
-          disabled={generating}
-        >
-          {generating ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
-          ) : (
-            <Zap className="w-4 h-4" />
+        <div className="flex items-center gap-2">
+          {hasTodayContent && todayDrafts.length > 0 && (
+            <Button
+              variant="ghost"
+              onClick={tryDifferentPosts}
+              disabled={discarding || generating}
+              title="Discard today's drafts and generate a fresh set"
+            >
+              {discarding ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <RefreshCw className="w-4 h-4" />
+              )}
+              Try Different Posts
+            </Button>
           )}
-          Generate Today&apos;s Posts
-        </Button>
+          <Button
+            variant="primary"
+            onClick={generateContent}
+            disabled={generating || discarding}
+          >
+            {generating ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Zap className="w-4 h-4" />
+            )}
+            Generate Today&apos;s Posts
+          </Button>
+        </div>
       </motion.div>
 
       {/* Stats */}
@@ -135,69 +186,7 @@ export default function DashboardClient({ brand, todayPosts: initialPosts, stats
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Posts Column */}
         <div className="lg:col-span-2">
-          {/* Draft posts (need approval) */}
-          {draftPosts.length > 0 && (
-            <div className="mb-6">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <h2 className="text-sm font-semibold text-[#f0f0f2]">
-                    Needs Approval
-                  </h2>
-                  <Badge variant="gold">{draftPosts.length}</Badge>
-                </div>
-                <button className="text-xs text-[#25D366] hover:underline">
-                  Approve all
-                </button>
-              </div>
-              <div className="space-y-3">
-                {draftPosts.map((post, i) => (
-                  <PostCard
-                    key={post.id}
-                    post={post}
-                    index={i}
-                    onAction={() => window.location.reload()}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Scheduled posts */}
-          {scheduledPosts.length > 0 && (
-            <div className="mb-6">
-              <div className="flex items-center gap-2 mb-3">
-                <h2 className="text-sm font-semibold text-[#f0f0f2]">
-                  Scheduled Today
-                </h2>
-                <Badge variant="blue">{scheduledPosts.length}</Badge>
-              </div>
-              <div className="space-y-3">
-                {scheduledPosts.map((post, i) => (
-                  <PostCard key={post.id} post={post} index={i} />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Sent posts */}
-          {sentPosts.length > 0 && (
-            <div>
-              <div className="flex items-center gap-2 mb-3">
-                <h2 className="text-sm font-semibold text-[#f0f0f2]">
-                  Sent Today
-                </h2>
-                <Badge variant="green">{sentPosts.length}</Badge>
-              </div>
-              <div className="space-y-3">
-                {sentPosts.map((post, i) => (
-                  <PostCard key={post.id} post={post} index={i} />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Empty state */}
-          {posts.length === 0 && (
+          {postsByDay.length === 0 ? (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -206,7 +195,7 @@ export default function DashboardClient({ brand, todayPosts: initialPosts, stats
               <div className="w-16 h-16 rounded-full bg-[#25D366]/10 flex items-center justify-center mb-4">
                 <Zap className="w-8 h-8 text-[#25D366]" />
               </div>
-              <h3 className="font-semibold mb-1">No posts for today yet</h3>
+              <h3 className="font-semibold mb-1">No posts yet</h3>
               <p className="text-sm text-[#8b8b9a] mb-6 max-w-xs">
                 Hit Generate to let your AI marketing team create today&apos;s
                 WhatsApp Status content
@@ -220,6 +209,16 @@ export default function DashboardClient({ brand, todayPosts: initialPosts, stats
                 Generate Posts
               </Button>
             </motion.div>
+          ) : (
+            <div className="space-y-8">
+              {postsByDay.map((group) => (
+                <DaySection
+                  key={group.dateStr}
+                  group={group}
+                  isToday={group.dateStr === todayDateStr}
+                />
+              ))}
+            </div>
           )}
         </div>
 
@@ -309,6 +308,77 @@ export default function DashboardClient({ brand, todayPosts: initialPosts, stats
             </div>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function DaySection({ group, isToday }: { group: DayGroup; isToday: boolean }) {
+  const draftPosts = group.posts.filter((p) => p.status === "DRAFT");
+  const scheduledPosts = group.posts.filter((p) => p.status === "SCHEDULED");
+  const sentPosts = group.posts.filter((p) => p.status === "SENT");
+
+  return (
+    <div>
+      {/* Day header */}
+      <div className="flex items-center gap-3 mb-4">
+        <h2 className={`text-base font-bold ${isToday ? "text-[#25D366]" : "text-[#f0f0f2]"}`}>
+          {group.label}
+        </h2>
+        <div className="flex-1 h-px bg-white/[0.06]" />
+        <span className="text-[11px] text-[#555562]">{group.posts.length} post{group.posts.length !== 1 ? "s" : ""}</span>
+      </div>
+
+      <div className="space-y-5">
+        {/* Drafts */}
+        {draftPosts.length > 0 && (
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-xs font-semibold text-[#8b8b9a] uppercase tracking-wide">Needs Approval</span>
+              <Badge variant="gold">{draftPosts.length}</Badge>
+            </div>
+            <div className="space-y-3">
+              {draftPosts.map((post, i) => (
+                <PostCard
+                  key={post.id}
+                  post={post}
+                  index={i}
+                  onAction={() => window.location.reload()}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Scheduled */}
+        {scheduledPosts.length > 0 && (
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-xs font-semibold text-[#8b8b9a] uppercase tracking-wide">Scheduled</span>
+              <Badge variant="blue">{scheduledPosts.length}</Badge>
+            </div>
+            <div className="space-y-3">
+              {scheduledPosts.map((post, i) => (
+                <PostCard key={post.id} post={post} index={i} onAction={() => window.location.reload()} />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Sent */}
+        {sentPosts.length > 0 && (
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-xs font-semibold text-[#8b8b9a] uppercase tracking-wide">Sent</span>
+              <Badge variant="green">{sentPosts.length}</Badge>
+            </div>
+            <div className="space-y-3">
+              {sentPosts.map((post, i) => (
+                <PostCard key={post.id} post={post} index={i} />
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
