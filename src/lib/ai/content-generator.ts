@@ -113,7 +113,7 @@ export async function generateDailyContent(brandId: string): Promise<void> {
       },
     });
 
-    // Generate image in background
+    // Generate image in background — pass variantIndex so each post gets a distinct visual style
     generatePostImage({
       postId: post.id,
       visualDirection: postData.visualDirection,
@@ -121,6 +121,7 @@ export async function generateDailyContent(brandId: string): Promise<void> {
       brandColors: (brand.colors as any) ?? {},
       postType: postData.type,
       tonality: postData.tonality,
+      variantIndex: i,
     }).catch((e) => console.error(`Image generation failed for post ${post.id}:`, e));
   }
 }

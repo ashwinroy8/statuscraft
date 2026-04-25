@@ -16,6 +16,13 @@ export interface TextOverlay {
   cta: string;
 }
 
+// Visual style variants — ensures each post gets a distinct look even if AI prompts are similar
+const STYLE_VARIANTS = [
+  "warm golden hour lighting, soft bokeh background, rich amber tones",
+  "cool crisp studio lighting, clean minimalist composition, blue-teal accents",
+  "dramatic dark background, vibrant neon accent lighting, high contrast cinematic",
+];
+
 interface ImageGenerationParams {
   postId: string;
   visualDirection: string;
@@ -29,16 +36,20 @@ interface ImageGenerationParams {
   postType: string;
   tonality: string;
   size?: "9:16" | "1:1";
+  variantIndex?: number; // 0, 1, or 2 — forces unique visual style per post
 }
 
 export async function generatePostImage(
   params: ImageGenerationParams
 ): Promise<string> {
-  const { postId, visualDirection, textOverlay, brandColors, postType, tonality, size = "9:16" } = params;
+  const { postId, visualDirection, textOverlay, brandColors, postType, tonality, size = "9:16", variantIndex = 0 } = params;
+  // Append a style variant so each post has a unique prompt — prevents Replicate cache hits
+  const styleVariant = STYLE_VARIANTS[variantIndex % STYLE_VARIANTS.length];
+  const enrichedVisualDirection = `${visualDirection}. Style: ${styleVariant}`;
 
   // Step 1: Optimize the visual prompt with Claude
   const directorPrompt = buildImageDirectorPrompt({
-    visualDirection,
+    visualDirection: enrichedVisualDirection,
     brandColors,
     postType,
     tonality,
