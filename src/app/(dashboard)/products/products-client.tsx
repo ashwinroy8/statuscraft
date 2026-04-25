@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { trpc } from "@/lib/trpc/client";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,9 @@ import {
   X,
   Check,
   IndianRupee,
+  Upload,
+  FileText,
+  Sparkles,
 } from "lucide-react";
 
 interface Props {
@@ -68,6 +71,14 @@ export default function ProductsClient({ brandId }: Props) {
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
+  // Import from file
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [importedProducts, setImportedProducts] = useState<any[] | null>(null);
+  const [savingImport, setSavingImport] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+
   function openAdd() {
     setEditingId(null);
     setForm(EMPTY_FORM);
@@ -117,6 +128,42 @@ export default function ProductsClient({ brandId }: Props) {
 
   const isSaving = createMutation.isPending || updateMutation.isPending;
 
+  async function handleFileImport(file: File) {
+    setImportError(null);
+    setImportedProducts(null);
+    setImporting(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch("/api/products/extract", { method: "POST", body: fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to extract");
+      setImportedProducts(data.products);
+    } catch (e: any) {
+      setImportError(e.message ?? "Something went wrong");
+    }
+    setImporting(false);
+  }
+
+  async function saveImportedProducts() {
+    if (!importedProducts?.length) return;
+    setSavingImport(true);
+    for (const p of importedProducts) {
+      try {
+        await createMutation.mutateAsync({
+          name: p.name,
+          description: p.description || undefined,
+          price: Number(p.price) || 0,
+          discountPrice: p.discountPrice ? Number(p.discountPrice) : undefined,
+          inStock: p.inStock !== false,
+        });
+      } catch {}
+    }
+    setImportedProducts(null);
+    setSavingImport(false);
+    utils.product.list.invalidate();
+  }
+
   return (
     <div className="p-8 max-w-[1100px] mx-auto">
       {/* Header */}
@@ -134,11 +181,145 @@ export default function ProductsClient({ brandId }: Props) {
             Manage your product catalogue for WhatsApp selling
           </p>
         </div>
-        <Button variant="primary" onClick={openAdd} disabled={showForm}>
-          <Plus className="w-4 h-4" />
-          Add Product
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" onClick={() => fileInputRef.current?.click()} disabled={importing}>
+            {importing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+            Import from File
+          </Button>
+          <Button variant="primary" onClick={openAdd} disabled={showForm}>
+            <Plus className="w-4 h-4" />
+            Add Product
+          </Button>
+        </div>
       </motion.div>
+
+      {/* Hidden file input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*,.pdf,.csv,.xlsx,.xls"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) handleFileImport(file);
+          e.target.value = "";
+        }}
+      />
+
+      {/* Drop zone — shown when no import in progress */}
+      {!importedProducts && !importing && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDragOver(false);
+            const file = e.dataTransfer.files?.[0];
+            if (file) handleFileImport(file);
+          }}
+          onClick={() => fileInputRef.current?.click()}
+          className={`border-2 border-dashed rounded-2xl p-6 mb-6 flex items-center gap-4 cursor-pointer transition-colors ${
+            dragOver
+              ? "border-[#25D366] bg-[#25D366]/5"
+              : "border-white/[0.08] hover:border-white/[0.15]"
+          }`}
+        >
+          <div className="w-10 h-10 rounded-xl bg-[#25D366]/10 flex items-center justify-center flex-shrink-0">
+            <FileText className="w-5 h-5 text-[#25D366]" />
+          </div>
+          <div>
+            <p className="text-sm font-medium">Drop your menu or price list here</p>
+            <p className="text-xs text-[#555562] mt-0.5">
+              Supports photos, PDF, Excel (.xlsx), or CSV — AI will extract all products automatically
+            </p>
+          </div>
+        </motion.div>
+      )}
+
+      {/* Importing spinner */}
+      {importing && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="border border-white/[0.08] rounded-2xl p-8 mb-6 flex flex-col items-center gap-3"
+        >
+          <Loader2 className="w-6 h-6 animate-spin text-[#25D366]" />
+          <p className="text-sm text-[#8b8b9a]">Reading your file and extracting products…</p>
+        </motion.div>
+      )}
+
+      {/* Import error */}
+      {importError && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="border border-red-500/20 bg-red-500/5 rounded-2xl p-4 mb-6 flex items-center justify-between"
+        >
+          <p className="text-sm text-red-400">{importError}</p>
+          <button onClick={() => setImportError(null)}><X className="w-4 h-4 text-red-400" /></button>
+        </motion.div>
+      )}
+
+      {/* Extracted products preview */}
+      <AnimatePresence>
+        {importedProducts && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            className="border border-[#25D366]/20 bg-[#25D366]/5 rounded-2xl p-5 mb-6"
+          >
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-[#25D366]" />
+                <span className="font-semibold text-sm">
+                  {importedProducts.length} products extracted — review before saving
+                </span>
+              </div>
+              <button onClick={() => setImportedProducts(null)} className="text-[#555562] hover:text-white">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-2 max-h-72 overflow-y-auto mb-4 pr-1">
+              {importedProducts.map((p, i) => (
+                <div key={i} className="flex items-center gap-3 bg-white/[0.03] rounded-xl px-4 py-2.5">
+                  <span className="text-xs font-mono text-[#555562] w-5 flex-shrink-0">{i + 1}</span>
+                  <span className="flex-1 text-sm font-medium truncate">{p.name}</span>
+                  {p.description && (
+                    <span className="text-xs text-[#555562] truncate max-w-[180px] hidden sm:block">{p.description}</span>
+                  )}
+                  <span className="flex items-center gap-0.5 text-sm font-mono text-[#25D366] flex-shrink-0">
+                    <IndianRupee className="w-3 h-3" />
+                    {p.discountPrice ?? p.price}
+                    {p.discountPrice && (
+                      <span className="text-[#555562] line-through ml-1">₹{p.price}</span>
+                    )}
+                  </span>
+                  <button
+                    onClick={() => setImportedProducts((prev) => prev?.filter((_, j) => j !== i) ?? null)}
+                    className="text-[#555562] hover:text-red-400 transition-colors flex-shrink-0"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-3">
+              <Button variant="primary" onClick={saveImportedProducts} disabled={savingImport}>
+                {savingImport ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                Save All {importedProducts.length} Products
+              </Button>
+              <Button variant="ghost" onClick={() => setImportedProducts(null)}>
+                Discard
+              </Button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Add form */}
       <AnimatePresence>
