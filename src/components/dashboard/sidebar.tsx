@@ -20,6 +20,7 @@ import {
   Mic,
   Sparkles,
   Video,
+  Wand2,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
@@ -35,6 +36,7 @@ const NAV_ITEMS = [
   { href: "/brand", icon: Building2, label: "Brand" },
   { href: "/templates", icon: Layers, label: "Templates" },
   { href: "/products", icon: Package, label: "Products" },
+  { href: "/studio", icon: Wand2, label: "Ad Studio", badge: "AI" },
   { href: "/voice", icon: Mic, label: "Voice to Post" },
   { href: "/festivals", icon: Sparkles, label: "Festivals" },
   { href: "/video", icon: Video, label: "Video Creator", badge: "NEW" },

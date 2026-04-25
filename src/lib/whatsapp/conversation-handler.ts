@@ -403,6 +403,45 @@ export async function handleIncomingMessage(
     return;
   }
 
+  // ── Handle image — Ad Studio: enhance product photo + generate ad copy ──────
+  if (messageType === "image") {
+    const mediaId: string = message.image?.id ?? "";
+    if (!mediaId) {
+      await sendText(from, "Couldn't read that image. Please try again!");
+      return;
+    }
+
+    await sendText(
+      from,
+      "📸 Product photo received! Enhancing it and writing ad copy...\n\n✨ Making it look professional and generating a tagline based on today's trends.\n\n⏳ Takes about 30-40 seconds!"
+    );
+
+    try {
+      const imageBuffer = await downloadMedia(mediaId);
+      const { runAdStudio } = await import("@/lib/media/ad-studio");
+      const result = await runAdStudio(imageBuffer, "image/jpeg", brand.id);
+
+      const caption =
+        `✨ *${result.headline}*\n\n` +
+        `${result.bodyText}\n\n` +
+        `👉 ${result.ctaText}`;
+
+      await sendImageWithButtons(
+        from,
+        result.enhancedImageUrl,
+        caption,
+        [
+          { id: `approve:${result.postId}`, title: "✅ Approve" },
+          { id: `reject:${result.postId}`, title: "❌ Discard" },
+        ]
+      );
+    } catch (e) {
+      console.error("Ad Studio error:", e);
+      await sendText(from, "Sorry, couldn't enhance that photo. Try sending a clearer product image, or use the Ad Studio on the website. 🙏");
+    }
+    return;
+  }
+
   // ── Handle audio (voice notes) — Feature 4: Voice-to-Post ────────────────
   if (messageType === "audio") {
     const mediaId: string = message.audio?.id ?? "";
