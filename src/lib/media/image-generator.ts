@@ -125,29 +125,44 @@ async function generateWithFlux({
   const width = aspectRatio === "9:16" ? 1080 : 1080;
   const height = aspectRatio === "9:16" ? 1920 : 1080;
 
-  const output = await replicate.run("black-forest-labs/flux-schnell", {
-    input: {
-      prompt: `${prompt}, high quality, professional photography, vibrant colors, sharp focus`,
-      width,
-      height,
-      num_inference_steps: 4,
-      output_format: "jpg",
-      output_quality: 90,
-    },
-  });
+  // Retry up to 4 times with exponential backoff on 429 rate limit errors
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    if (attempt > 0) {
+      const delay = attempt * 12_000; // 12s, 24s, 36s
+      console.log(`[Flux] Rate limited — retrying in ${delay / 1000}s (attempt ${attempt + 1}/4)`);
+      await new Promise((r) => setTimeout(r, delay));
+    }
+    try {
+      const output = await replicate.run("black-forest-labs/flux-schnell", {
+        input: {
+          prompt: `${prompt}, high quality, professional photography, vibrant colors, sharp focus`,
+          width,
+          height,
+          num_inference_steps: 4,
+          output_format: "jpg",
+          output_quality: 90,
+        },
+      });
 
-  // Replicate returns various formats depending on SDK version
-  if (typeof output === "string") return output;
-  if (Array.isArray(output) && output.length > 0) {
-    const item = output[0];
-    if (typeof item === "string") return item;
-    if (item && typeof (item as any).url === "function") return await (item as any).url();
-    if (item && typeof (item as any).url === "string") return (item as any).url;
-    return String(item);
+      if (typeof output === "string") return output;
+      if (Array.isArray(output) && output.length > 0) {
+        const item = output[0];
+        if (typeof item === "string") return item;
+        if (item && typeof (item as any).url === "function") return await (item as any).url();
+        if (item && typeof (item as any).url === "string") return (item as any).url;
+        return String(item);
+      }
+      if (output && typeof (output as any).url === "function") return await (output as any).url();
+      if (output && typeof (output as any).url === "string") return (output as any).url;
+      throw new Error("Flux returned unexpected output format: " + typeof output);
+    } catch (err: any) {
+      lastError = err;
+      const is429 = err?.response?.status === 429 || err?.message?.includes("429") || err?.message?.includes("Too Many Requests");
+      if (!is429) throw err; // Non-rate-limit error — don't retry
+    }
   }
-  if (output && typeof (output as any).url === "function") return await (output as any).url();
-  if (output && typeof (output as any).url === "string") return (output as any).url;
-  throw new Error("Flux returned unexpected output format: " + typeof output);
+  throw lastError ?? new Error("Flux failed after retries");
 }
 
 async function generateWithIdeogram({
