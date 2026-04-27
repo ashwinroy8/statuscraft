@@ -524,11 +524,18 @@ export async function handleIncomingMessage(
           );
         },
       });
-    } catch (e) {
-      console.error("Voice-to-post error:", e);
+    } catch (e: any) {
+      console.error("[Voice-to-post] FULL ERROR:", e?.message ?? e);
+      console.error("[Voice-to-post] Stack:", e?.stack);
+      const hint = e?.message?.includes("GROQ_API_KEY")
+        ? "GROQ_API_KEY is not set on the server."
+        : e?.message?.includes("Groq transcription failed")
+        ? `Groq error: ${e.message}`
+        : e?.message ?? String(e);
+      console.error("[Voice-to-post] Hint:", hint);
       await sendText(
         from,
-        "Sorry, I had trouble processing that voice note. Please try again or type 'post [description]' instead. 🙏"
+        `Sorry, I had trouble with your voice note. Please try again or type your message instead. 🙏\n\n_Error: ${hint.slice(0, 120)}_`
       );
     }
     return;
