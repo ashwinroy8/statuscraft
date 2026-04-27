@@ -219,6 +219,26 @@ export async function handleIncomingMessage(
       return;
     }
 
+    // Auto-generate ad from stored product image (no voice note)
+    if (replyId.startsWith("autogenerate_ad:")) {
+      const imageUrl = replyId.replace("autogenerate_ad:", "");
+      await sendText(from, "✨ Generating your professional ad...\n\n⏳ Takes about 30-40 seconds!");
+      await expireSession(from);
+      try {
+        const { runAdStudioFromUrl } = await import("@/lib/media/ad-studio");
+        const result = await runAdStudioFromUrl(imageUrl, brand.id);
+        const caption = `✨ *${result.headline}*\n\n${result.bodyText}\n\n👉 ${result.ctaText}`;
+        await sendImageWithButtons(from, result.enhancedImageUrl, caption, [
+          { id: `approve:${result.postId}`, title: "✅ Approve" },
+          { id: `reject:${result.postId}`, title: "❌ Discard" },
+        ]);
+      } catch (e) {
+        console.error("Ad Studio error:", e);
+        await sendText(from, "Sorry, couldn't generate the ad. Please try again. 🙏");
+      }
+      return;
+    }
+
     // Approve a specific post
     if (replyId.startsWith("approve:")) {
       const postId = replyId.replace("approve:", "");
@@ -403,7 +423,7 @@ export async function handleIncomingMessage(
     return;
   }
 
-  // ── Handle image — Ad Studio: enhance product photo + generate ad copy ──────
+  // ── Handle image — store and ask for voice note or auto-generate ─────────────
   if (messageType === "image") {
     const mediaId: string = message.image?.id ?? "";
     if (!mediaId) {
@@ -411,38 +431,30 @@ export async function handleIncomingMessage(
       return;
     }
 
-    await sendText(
-      from,
-      "📸 Product photo received! Enhancing it and writing ad copy...\n\n✨ Making it look professional and generating a tagline based on today's trends.\n\n⏳ Takes about 30-40 seconds!"
-    );
-
     try {
+      // Upload to storage so we can retrieve it when the voice note arrives
       const imageBuffer = await downloadMedia(mediaId);
-      const { runAdStudio } = await import("@/lib/media/ad-studio");
-      const result = await runAdStudio(imageBuffer, "image/jpeg", brand.id);
+      const { uploadFileToStorage } = await import("@/lib/media/storage");
+      const imagePath = `whatsapp-uploads/${brand.id}/${Date.now()}.jpg`;
+      const storedImageUrl = await uploadFileToStorage(imageBuffer, imagePath, "image/jpeg");
 
-      const caption =
-        `✨ *${result.headline}*\n\n` +
-        `${result.bodyText}\n\n` +
-        `👉 ${result.ctaText}`;
+      // Save image URL in session — wait for voice note
+      await upsertSession(user.id, brand.id, from, "AWAITING_VOICE_FOR_IMAGE", { imageUrl: storedImageUrl });
 
-      await sendImageWithButtons(
+      await sendButtons(
         from,
-        result.enhancedImageUrl,
-        caption,
-        [
-          { id: `approve:${result.postId}`, title: "✅ Approve" },
-          { id: `reject:${result.postId}`, title: "❌ Discard" },
-        ]
+        "📸 Product photo received!",
+        "Now send a *voice note* to describe it — price, offer, anything you want to say.\n\nOr tap below to auto-generate an ad right away.",
+        [{ id: `autogenerate_ad:${storedImageUrl}`, title: "⚡ Auto-Generate Ad" }]
       );
     } catch (e) {
-      console.error("Ad Studio error:", e);
-      await sendText(from, "Sorry, couldn't enhance that photo. Try sending a clearer product image, or use the Ad Studio on the website. 🙏");
+      console.error("Image save error:", e);
+      await sendText(from, "Sorry, couldn't save that image. Please try again. 🙏");
     }
     return;
   }
 
-  // ── Handle audio (voice notes) — Feature 4: Voice-to-Post ────────────────
+  // ── Handle audio (voice notes) ───────────────────────────────────────────────
   if (messageType === "audio") {
     const mediaId: string = message.audio?.id ?? "";
     if (!mediaId) {
@@ -450,13 +462,41 @@ export async function handleIncomingMessage(
       return;
     }
 
+    const audioBuffer = await downloadMedia(mediaId);
+
+    // ── Voice note + pending product image → combined Ad Studio ──────────────
+    const pendingImage = session?.state === "AWAITING_VOICE_FOR_IMAGE"
+      ? (session.stateData as any)?.imageUrl as string | undefined
+      : undefined;
+
+    if (pendingImage) {
+      await expireSession(from);
+      await sendText(
+        from,
+        "🎙️📸 Got your voice note + photo! Creating a professional ad...\n\n⏳ Takes about 30-40 seconds!"
+      );
+      try {
+        const { runAdStudioWithVoice } = await import("@/lib/media/ad-studio");
+        const result = await runAdStudioWithVoice(audioBuffer, pendingImage, brand.id);
+        const caption = `✨ *${result.headline}*\n\n${result.bodyText}\n\n👉 ${result.ctaText}`;
+        await sendImageWithButtons(from, result.enhancedImageUrl, caption, [
+          { id: `approve:${result.postId}`, title: "✅ Approve" },
+          { id: `reject:${result.postId}`, title: "❌ Discard" },
+        ]);
+      } catch (e) {
+        console.error("Ad Studio + voice error:", e);
+        await sendText(from, "Sorry, couldn't generate the ad. Please try again. 🙏");
+      }
+      return;
+    }
+
+    // ── Voice note alone → 3 post variants ───────────────────────────────────
     await sendText(
       from,
       "🎙️ Voice note received! Transcribing and generating 3 posts with images...\n\n⏳ Takes about 60 seconds — I'll send each image directly here as it's ready!"
     );
 
     try {
-      const audioBuffer = await downloadMedia(mediaId);
       const styleEmojis = ["🔥", "✨", "😄"];
       const styleLabels = ["Bold", "Elegant", "Fun"];
 

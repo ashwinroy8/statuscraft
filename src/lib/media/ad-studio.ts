@@ -8,6 +8,7 @@ import Replicate from "replicate";
 import Anthropic from "@anthropic-ai/sdk";
 import { prisma } from "@/lib/prisma";
 import { uploadFileToStorage } from "./storage";
+import { transcribeAudio } from "@/lib/voice/transcription";
 
 const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN });
 const anthropic = new Anthropic();
@@ -210,4 +211,108 @@ async function enhanceWithFlux(imageUrl: string, prompt: string): Promise<string
     }
   }
   throw lastError ?? new Error("Enhancement failed");
+}
+
+// ── Run Ad Studio from an already-stored image URL (no buffer needed) ─────────
+export async function runAdStudioFromUrl(
+  imageUrl: string,
+  brandId: string
+): Promise<AdStudioResult> {
+  const res = await fetch(imageUrl);
+  const buffer = Buffer.from(await res.arrayBuffer());
+  return runAdStudio(buffer, "image/jpeg", brandId);
+}
+
+// ── Combined: voice note + product image → single enhanced ad post ────────────
+export async function runAdStudioWithVoice(
+  audioBuffer: Buffer,
+  imageUrl: string,
+  brandId: string
+): Promise<AdStudioResult> {
+  const brand = await prisma.brand.findUniqueOrThrow({
+    where: { id: brandId },
+    select: { name: true, category: true, description: true, colors: true },
+  });
+
+  // Fetch signals for trend context
+  const signals = await prisma.signal.findMany({
+    where: { relevanceScore: { gte: 60 }, OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] },
+    orderBy: { relevanceScore: "desc" },
+    take: 3,
+    select: { title: true, type: true },
+  });
+  const signalContext = signals.length > 0
+    ? signals.map((s) => `${s.type}: ${s.title}`).join("; ")
+    : "general Indian market trends";
+
+  // Step 1: Transcribe voice note
+  const transcription = await transcribeAudio(audioBuffer);
+  const voiceText = transcription.text;
+
+  // Step 2: Claude Vision + voice transcript together
+  const imgRes = await fetch(imageUrl);
+  const imgBuffer = Buffer.from(await imgRes.arrayBuffer());
+  const base64 = imgBuffer.toString("base64");
+
+  const analysisResponse = await anthropic.messages.create({
+    model: "claude-sonnet-4-6",
+    max_tokens: 1000,
+    messages: [{
+      role: "user",
+      content: [
+        { type: "image", source: { type: "base64", media_type: "image/jpeg", data: base64 } },
+        {
+          type: "text",
+          text: `This is a product photo from "${brand.name}" (${brand.category}).
+The owner described it in a voice note: "${voiceText}"
+Current trends: ${signalContext}
+
+Generate an ad for this product. Return JSON:
+{
+  "productName": "short product name from image + voice",
+  "fluxPrompt": "professional product ad photography prompt for FLUX — 2-3 sentences describing ideal professional version, studio lighting, commercial quality, no text",
+  "headline": "punchy headline under 8 words",
+  "bodyText": "2-3 engaging sentences using the voice note details and trends. Use 1-2 emojis.",
+  "ctaText": "short CTA under 6 words",
+  "hashtags": ["#tag1","#tag2","#tag3","#tag4","#tag5"]
+}`,
+        },
+      ],
+    }],
+  });
+
+  const analysisText = analysisResponse.content[0].type === "text" ? analysisResponse.content[0].text : "{}";
+  const jsonMatch = analysisText.match(/\{[\s\S]*\}/);
+  const analysis = jsonMatch ? JSON.parse(jsonMatch[0]) : {};
+
+  const productName: string = analysis.productName ?? "Product";
+  const fluxPrompt: string = analysis.fluxPrompt ?? `Professional product photography of ${productName}, studio lighting, commercial quality`;
+  const headline: string = analysis.headline ?? `${productName} — Get Yours Now!`;
+  const bodyText: string = analysis.bodyText ?? voiceText.slice(0, 200);
+  const ctaText: string = analysis.ctaText ?? "Order Now";
+  const hashtags: string[] = analysis.hashtags ?? [];
+
+  // Step 3: Enhance image with FLUX
+  const enhancedImageUrl = await enhanceWithFlux(imageUrl, fluxPrompt);
+
+  // Step 4: Save original to storage
+  const originalPath = `ad-studio/${brandId}/${Date.now()}-original.jpg`;
+  const originalImageUrl = await uploadFileToStorage(imgBuffer, originalPath, "image/jpeg");
+
+  // Step 5: Create draft post
+  const post = await prisma.post.create({
+    data: {
+      brandId,
+      type: "PRODUCT",
+      status: "DRAFT",
+      tonality: "PREMIUM",
+      headline,
+      bodyText: `${bodyText}\n\n${hashtags.join(" ")}`,
+      ctaText,
+      imageUrl: enhancedImageUrl,
+      aiReasoning: `Ad Studio (voice+image): "${voiceText.slice(0, 100)}". Trends: ${signalContext}`,
+    },
+  });
+
+  return { postId: post.id, originalImageUrl, enhancedImageUrl, headline, bodyText, ctaText, hashtags, productName };
 }
