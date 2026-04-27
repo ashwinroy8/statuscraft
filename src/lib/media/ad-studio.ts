@@ -163,74 +163,94 @@ Return JSON:
   };
 }
 
+// Fixed canvas: 1080×1920 (9:16 WhatsApp Status) — FLUX Schnell requires multiples of 16
+const CANVAS_W = 1080;
+const CANVAS_H = 1920;
+
 /**
  * Three-step enhancement — product is NEVER changed:
  * 1. rembg → removes background, keeps product with transparency
- * 2. FLUX Schnell → generates a matching professional studio background
- * 3. Sharp → composites product on top of new background, applies sharpening
+ * 2. FLUX Schnell → generates a matching professional studio background (1080×1920)
+ * 3. Sharp → composites product centered on background, applies edge sharpening
+ *
+ * Falls back to FLUX-only (no compositing) if rembg fails.
  */
 async function enhanceProductPhoto(imageUrl: string, backgroundPrompt: string): Promise<string> {
-  // ── Step 1: Remove background ───────────────────────────────────────────────
-  console.log("[AdStudio] Removing background...");
-  const rembgOutput = await replicateRun("cjwbw/rembg:fb8af171cfa1616ddcf1242c093f9c46bcada5ad23a5bb7", {
-    image: imageUrl,
-    model: "u2net",
-  });
-  const rembgUrl = extractUrl(rembgOutput);
+  // ── Step 2 (run in parallel with step 1): Generate background ────────────────
+  console.log("[AdStudio] Generating background + removing bg in parallel...");
+  const bgPrompt = `${backgroundPrompt}, clean professional photography studio background, soft even lighting, no objects no people, subtle gradient, high quality`;
 
-  // Download the product PNG (transparent background)
-  const productRes = await fetch(rembgUrl);
-  const productBuffer = Buffer.from(await productRes.arrayBuffer());
+  const [bgResult, rembgResult] = await Promise.allSettled([
+    replicateRun("black-forest-labs/flux-schnell", {
+      prompt: bgPrompt,
+      width: CANVAS_W,
+      height: CANVAS_H,
+      num_inference_steps: 4,
+      output_format: "jpg",
+      output_quality: 95,
+    }),
+    replicateRun("cjwbw/rembg", {
+      image: imageUrl,
+      model: "u2net",
+    }),
+  ]);
 
-  // Get product dimensions
-  const productMeta = await sharp(productBuffer).metadata();
-  const prodW = productMeta.width ?? 1080;
-  const prodH = productMeta.height ?? 1080;
+  if (bgResult.status === "rejected") {
+    console.error("[AdStudio] Background generation failed:", bgResult.reason);
+    throw new Error("Background generation failed: " + bgResult.reason?.message);
+  }
 
-  // Canvas = 9:16 sized to fit the product nicely
-  const canvasH = Math.max(prodH, Math.round(prodW * (16 / 9)));
-  const canvasW = Math.round(canvasH * (9 / 16));
-
-  // ── Step 2: Generate professional background with FLUX ──────────────────────
-  console.log("[AdStudio] Generating background...");
-  const bgPrompt = `${backgroundPrompt}, clean professional photography studio background, soft even lighting, no objects, no people, subtle gradient, high quality, ${canvasW}x${canvasH}`;
-
-  const bgOutput = await replicateRun("black-forest-labs/flux-schnell", {
-    prompt: bgPrompt,
-    width: canvasW,
-    height: canvasH,
-    num_inference_steps: 4,
-    output_format: "jpg",
-    output_quality: 95,
-  });
-  const bgUrl = extractUrl(bgOutput);
-
+  const bgUrl = extractUrl(bgResult.value);
   const bgRes = await fetch(bgUrl);
   const bgBuffer = Buffer.from(await bgRes.arrayBuffer());
 
-  // ── Step 3: Composite product onto background + sharpen ─────────────────────
-  console.log("[AdStudio] Compositing...");
+  // ── Step 3: Composite if rembg succeeded, otherwise use original ─────────────
+  if (rembgResult.status === "rejected") {
+    console.warn("[AdStudio] rembg failed, using original product on new background:", rembgResult.reason?.message);
+    // Fallback: resize original onto background (no transparency, but still better bg)
+    const origRes = await fetch(imageUrl);
+    const origBuffer = Buffer.from(await origRes.arrayBuffer());
 
-  // Scale product to fill ~80% of canvas height, centered
-  const targetH = Math.round(canvasH * 0.80);
-  const scale = targetH / prodH;
-  const targetW = Math.round(prodW * scale);
+    const composited = await sharp(bgBuffer)
+      .resize(CANVAS_W, CANVAS_H, { fit: "cover" })
+      .composite([{
+        input: await sharp(origBuffer)
+          .resize(Math.round(CANVAS_W * 0.80), Math.round(CANVAS_H * 0.70), { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } })
+          .toBuffer(),
+        top: Math.round(CANVAS_H * 0.12),
+        left: Math.round(CANVAS_W * 0.10),
+        blend: "over",
+      }])
+      .jpeg({ quality: 92 })
+      .toBuffer();
+
+    const path = `ad-studio/enhanced/${Date.now()}.jpg`;
+    return uploadFileToStorage(composited, path, "image/jpeg");
+  }
+
+  console.log("[AdStudio] Compositing product onto background...");
+  const rembgUrl = extractUrl(rembgResult.value);
+  const productRes = await fetch(rembgUrl);
+  const productBuffer = Buffer.from(await productRes.arrayBuffer());
+
+  // Scale product to 78% of canvas height, centered
+  const targetH = Math.round(CANVAS_H * 0.78);
+  const targetW = Math.round(CANVAS_W * 0.82);
 
   const resizedProduct = await sharp(productBuffer)
     .resize(targetW, targetH, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } })
-    .sharpen({ sigma: 1.2, m1: 0.5, m2: 0.5 }) // sharpen the product edges
+    .sharpen({ sigma: 1.0, m1: 0.5, m2: 0.5 })
     .toBuffer();
 
-  const left = Math.round((canvasW - targetW) / 2);
-  const top = Math.round((canvasH - targetH) / 2);
+  const left = Math.round((CANVAS_W - targetW) / 2);
+  const top = Math.round((CANVAS_H - targetH) / 2);
 
   const composited = await sharp(bgBuffer)
-    .resize(canvasW, canvasH, { fit: "cover" })
+    .resize(CANVAS_W, CANVAS_H, { fit: "cover" })
     .composite([{ input: resizedProduct, top, left, blend: "over" }])
     .jpeg({ quality: 92 })
     .toBuffer();
 
-  // Save to Supabase
   const path = `ad-studio/enhanced/${Date.now()}.jpg`;
   return uploadFileToStorage(composited, path, "image/jpeg");
 }
