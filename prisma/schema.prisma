@@ -455,6 +455,35 @@ model OtpCode {
   @@index([expiresAt])
 }
 
+// ─── Visitor Tracking ────────────────────────────────────────────────────────
+
+model Visitor {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+
+  // Traffic source
+  source    String   @default("direct") // direct | google | product-hunt | twitter | facebook | instagram | whatsapp | other
+  referrer  String?  // raw referrer host, max 120 chars
+  utmSource   String?
+  utmMedium   String?
+  utmCampaign String?
+
+  // Location (IP not stored)
+  country   String?
+  city      String?
+
+  // Device
+  device    String?  // mobile | desktop | tablet
+
+  // Did they sign up?
+  converted Boolean  @default(false)
+
+  @@index([createdAt])
+  @@index([source])
+  @@index([country])
+  @@index([converted])
+}
+
 // ─── Feature 3: Watermark Analytics ─────────────────────────────────────────
 
 model WatermarkImpression {

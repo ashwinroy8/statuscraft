@@ -1,304 +1,331 @@
+/**
+ * WhatsApp Onboarding — 3 messages, account live, posts delivered.
+ *
+ * Flow:
+ *  Message 1 (any) → "What's your business called?"
+ *  Message 2       → business name saved → numbered category list sent
+ *  Message 3       → category chosen → account created → 3 posts sent immediately
+ */
 import { prisma } from "@/lib/prisma";
-import { sendText, sendButtons, sendList } from "./client";
+import { sendText, sendButtons } from "./client";
 import { getAdminClient } from "@/lib/supabase/admin";
+import Anthropic from "@anthropic-ai/sdk";
 
-const CATEGORIES: Array<{ id: string; title: string }> = [
-  { id: "cat:restaurant", title: "Restaurant / Food" },
-  { id: "cat:retail", title: "Retail / Shop" },
-  { id: "cat:salon", title: "Salon / Beauty" },
-  { id: "cat:realestate", title: "Real Estate" },
-  { id: "cat:education", title: "Education / Coaching" },
-  { id: "cat:medical", title: "Medical / Pharmacy" },
-  { id: "cat:services", title: "Services & Repair" },
-  { id: "cat:tech", title: "Tech / IT" },
-  { id: "cat:fashion", title: "Fashion / Clothing" },
-  { id: "cat:fitness", title: "Fitness / Gym" },
+const anthropic = new Anthropic();
+
+// ── Category list (numbered for maximum compatibility) ────────────────────────
+const CATEGORIES = [
+  { n: 1,  label: "Restaurant / Food & Drinks" },
+  { n: 2,  label: "Sweet Shop / Bakery"         },
+  { n: 3,  label: "Salon & Beauty"              },
+  { n: 4,  label: "Retail / Kirana Store"       },
+  { n: 5,  label: "Clothing & Fashion"          },
+  { n: 6,  label: "Coaching / Education"        },
+  { n: 7,  label: "Medical / Pharmacy"          },
+  { n: 8,  label: "Jewellery"                   },
+  { n: 9,  label: "Electronics & Gadgets"       },
+  { n: 10, label: "Real Estate"                 },
+  { n: 11, label: "Fitness / Gym"               },
+  { n: 12, label: "Other"                       },
 ];
 
-const CATEGORY_LABELS: Record<string, string> = Object.fromEntries(
-  CATEGORIES.map((c) => [c.id, c.title])
-);
-
-interface OnboardingData {
-  ownerName?: string;
-  businessName?: string;
-  category?: string;
-  description?: string;
+function categoryLine() {
+  return CATEGORIES.map(c => `${c.n}. ${c.label}`).join("\n");
 }
 
+function matchCategory(text: string): string | null {
+  const trimmed = text.trim().toLowerCase();
+  // Try exact number
+  const n = parseInt(trimmed);
+  if (!isNaN(n)) {
+    const match = CATEGORIES.find(c => c.n === n);
+    if (match) return match.label;
+  }
+  // Try partial name match
+  const byName = CATEGORIES.find(c => c.label.toLowerCase().includes(trimmed) || trimmed.includes(c.label.toLowerCase().split("/")[0].trim()));
+  return byName?.label ?? null;
+}
+
+// ── Session helpers ───────────────────────────────────────────────────────────
+async function getSession(phone: string) {
+  return prisma.onboardingSession.findUnique({ where: { phone } });
+}
+
+async function setStep(phone: string, step: string, data: object) {
+  await prisma.onboardingSession.upsert({
+    where: { phone },
+    create: { phone, step, data },
+    update: { step, data, updatedAt: new Date() },
+  });
+}
+
+async function clearSession(phone: string) {
+  await prisma.onboardingSession.delete({ where: { phone } }).catch(() => {});
+}
+
+// ── Entry point ───────────────────────────────────────────────────────────────
 export async function handleOnboardingMessage(
   from: string,
   messageType: string,
   message: any,
   contactName?: string
 ): Promise<void> {
-  const session = await prisma.onboardingSession.findUnique({ where: { phone: from } });
+  const session = await getSession(from);
+  const step = session?.step ?? "WELCOME";
+  const data: any = session?.data ?? {};
 
+  // ── Interactive button reply ───────────────────────────────────────────────
   if (messageType === "interactive") {
     const replyId: string =
       message.interactive?.button_reply?.id ??
       message.interactive?.list_reply?.id ??
       "";
 
-    if (replyId === "onboard:yes") {
-      await updateSession(from, "ASK_NAME", {});
-      await sendText(from, "Great! Let's get you set up 🙌\n\n*What's your name?*");
+    if (replyId === "onboard:restart") {
+      await clearSession(from);
+      await askBusinessName(from);
       return;
     }
 
-    if (replyId === "onboard:skip") {
-      await prisma.onboardingSession.delete({ where: { phone: from } }).catch(() => {});
-      await sendText(from, "No worries! Whenever you're ready, just message us again to sign up. 👋");
+    // Any other interactive during onboarding — re-ask current step
+    await nudge(from, step, data);
+    return;
+  }
+
+  // ── Text messages ─────────────────────────────────────────────────────────
+  if (messageType === "text") {
+    const text = message.text?.body?.trim() ?? "";
+
+    // ── STEP 1: Ask business name ──────────────────────────────────────────
+    if (step === "WELCOME") {
+      await askBusinessName(from, contactName);
       return;
     }
 
-    if (replyId.startsWith("cat:") && session?.step === "ASK_CATEGORY") {
-      const category = CATEGORY_LABELS[replyId] ?? replyId.replace("cat:", "");
-      const data = { ...(session.data as OnboardingData), category };
-      await updateSession(from, "ASK_DESCRIPTION", data);
+    // ── STEP 2: Receive business name → ask category ───────────────────────
+    if (step === "ASK_BUSINESS_NAME") {
+      if (text.length < 2) {
+        await sendText(from, "Please tell me your business name 😊");
+        return;
+      }
+      const newData = { ...data, businessName: text };
+      await setStep(from, "ASK_CATEGORY", newData);
       await sendText(
         from,
-        `*${category}* ✅\n\nIn one sentence, what do you sell or offer?\n\n_Example: "We make and deliver fresh cakes for all occasions"_`
+        `Got it — *${text}* 🎉\n\nWhat type of business is it? Reply with the *number*:\n\n${categoryLine()}`
       );
       return;
     }
 
-    if (replyId === "onboard:confirm" && session?.step === "CONFIRM") {
-      await createAccount(from, session.data as OnboardingData);
-      return;
-    }
-
-    if (replyId === "onboard:restart") {
-      await prisma.onboardingSession.delete({ where: { phone: from } }).catch(() => {});
-      await startOnboarding(from, contactName);
-      return;
-    }
-
-    // Unhandled interactive during onboarding — nudge them along
-    if (session) {
-      await sendText(from, "Please reply to the question above to continue your signup 😊");
-      return;
-    }
-  }
-
-  if (messageType === "text") {
-    const text = message.text?.body?.trim() ?? "";
-    const lower = text.toLowerCase();
-
-    if (!session || session.step === "WELCOME") {
-      if (
-        ["yes", "hi", "hello", "hey", "start", "haan", "ha", "ok", "okay", "signup", "sign up"].some(
-          (k) => lower.includes(k)
-        )
-      ) {
-        await updateSession(from, "ASK_NAME", {});
-        await sendText(from, "Great! Let's get you set up 🙌\n\n*What's your name?*");
-      } else {
-        await startOnboarding(from, contactName);
-      }
-      return;
-    }
-
-    if (session.step === "ASK_NAME") {
-      if (text.length < 2) {
-        await sendText(from, "Please tell me your name 😊");
+    // ── STEP 3: Receive category → create account + generate posts ─────────
+    if (step === "ASK_CATEGORY") {
+      const category = matchCategory(text);
+      if (!category) {
+        await sendText(
+          from,
+          `Please reply with a number from the list:\n\n${categoryLine()}`
+        );
         return;
       }
-      const data = { ...(session.data as OnboardingData), ownerName: text };
-      await updateSession(from, "ASK_BUSINESS_NAME", data);
-      await sendText(from, `Hi *${text}*! 👋\n\nWhat's the name of your business?`);
+      const finalData = { ...data, category };
+      await setStep(from, "CREATING", finalData);
+      await sendText(from, `✅ *${category}*\n\nCreating your account and first posts… ⏳`);
+      await createAccountAndSendPosts(from, finalData);
       return;
     }
 
-    if (session.step === "ASK_BUSINESS_NAME") {
-      if (text.length < 2) {
-        await sendText(from, "Please enter your business name 😊");
-        return;
-      }
-      const data = { ...(session.data as OnboardingData), businessName: text };
-      await updateSession(from, "ASK_CATEGORY", data);
-      await sendCategoryList(from);
+    if (step === "CREATING") {
+      await sendText(from, "Still creating your posts — almost done! ⏳");
       return;
     }
 
-    if (session.step === "ASK_DESCRIPTION") {
-      if (text.length < 5) {
-        await sendText(from, "Please describe your business in a few words 😊");
-        return;
-      }
-      const data = { ...(session.data as OnboardingData), description: text };
-      await updateSession(from, "CONFIRM", data);
-      await sendConfirmation(from, data as OnboardingData);
-      return;
-    }
-
-    if (session.step === "CONFIRM") {
-      if (["yes", "confirm", "ok", "okay", "haan", "correct"].some((k) => lower.includes(k))) {
-        await createAccount(from, session.data as OnboardingData);
-      } else {
-        await prisma.onboardingSession.delete({ where: { phone: from } }).catch(() => {});
-        await startOnboarding(from, contactName);
-      }
-      return;
-    }
-
-    // Catch-all for any other text during onboarding
-    await sendText(from, "Please reply to the question above, or send *restart* to start over. 😊");
+    // Fallback nudge
+    await nudge(from, step, data);
     return;
   }
 
-  // Non-text, non-interactive message (image, video, etc.) during onboarding
-  if (session) {
-    await sendText(from, "Please reply with text to continue signing up 😊");
+  // ── Non-text (image, audio, etc.) before onboarding complete ─────────────
+  if (messageType !== "text" && messageType !== "interactive") {
+    if (!session || step === "WELCOME") {
+      await askBusinessName(from, contactName);
+    } else {
+      await nudge(from, step, data);
+    }
     return;
   }
-
-  await startOnboarding(from, contactName);
 }
 
-async function startOnboarding(from: string, contactName?: string) {
-  await prisma.onboardingSession.upsert({
-    where: { phone: from },
-    create: { phone: from, step: "WELCOME", data: {} },
-    update: { step: "WELCOME", data: {}, updatedAt: new Date() },
-  });
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
-  const name = contactName ? `, ${contactName}` : "";
-  await sendButtons(
+async function askBusinessName(from: string, contactName?: string) {
+  await setStep(from, "ASK_BUSINESS_NAME", {});
+  const greeting = contactName ? `Hi ${contactName}! 👋` : "Hi there! 👋";
+  await sendText(
     from,
-    `Hi${name}! Welcome to StatusCraft 🚀`,
-    "I use AI to create daily *WhatsApp Status posts* for your business — fresh marketing content every morning, automatically.\n\nWant to set up your free account? Takes 2 minutes!",
-    [
-      { id: "onboard:yes", title: "Yes, sign me up! 🎉" },
-      { id: "onboard:skip", title: "Not now" },
-    ]
+    `${greeting} Welcome to *StatusCraft* — your AI marketing assistant.\n\nI'll set up your account in *under 2 minutes* and create your first posts right here on WhatsApp.\n\n*What's your business called?*`
   );
 }
 
-async function sendCategoryList(from: string) {
-  await sendList(
-    from,
-    "What type of business do you run?",
-    "Pick the category that best describes your business 👇",
-    "Choose category",
-    [
-      {
-        title: "Business categories",
-        rows: CATEGORIES.map((c) => ({ id: c.id, title: c.title })),
-      },
-    ]
-  );
+async function nudge(from: string, step: string, data: any) {
+  if (step === "ASK_BUSINESS_NAME") {
+    await sendText(from, "What's your business name? 😊");
+  } else if (step === "ASK_CATEGORY") {
+    await sendText(from, `Please reply with a number:\n\n${categoryLine()}`);
+  } else {
+    await sendText(from, "Type *restart* to start over, or keep replying to continue. 😊");
+  }
 }
 
-async function sendConfirmation(from: string, data: OnboardingData) {
-  await sendButtons(
-    from,
-    "Almost done! Here's your setup:",
-    `👤 *Name:* ${data.ownerName}\n🏪 *Business:* ${data.businessName}\n🏷️ *Category:* ${data.category}\n📝 *About:* ${data.description}\n\nLooks good?`,
-    [
-      { id: "onboard:confirm", title: "✅ Yes, create account!" },
-      { id: "onboard:restart", title: "🔄 Start over" },
-    ]
-  );
-}
-
-async function createAccount(from: string, data: OnboardingData): Promise<void> {
-  await sendText(from, "Creating your account... ⏳");
-
+async function createAccountAndSendPosts(from: string, data: any): Promise<void> {
+  const { businessName, category } = data;
   const placeholderEmail = `${from}@wa.statuscraft.in`;
 
   try {
     const adminClient = getAdminClient();
 
-    // Create or retrieve Supabase auth user
+    // 1. Create Supabase user
     let supabaseUserId: string;
     const { data: createData, error: createError } = await adminClient.auth.admin.createUser({
       email: placeholderEmail,
       email_confirm: true,
       phone: `+${from}`,
       phone_confirm: true,
-      user_metadata: { full_name: data.ownerName, source: "whatsapp_onboarding" },
+      user_metadata: { source: "whatsapp_onboarding" },
     });
 
     if (createError) {
-      // User may already exist — look them up by email
       const { data: listData } = await adminClient.auth.admin.listUsers();
-      const existing = listData?.users?.find((u) => u.email === placeholderEmail);
+      const existing = listData?.users?.find((u) => u.email === placeholderEmail || u.phone === `+${from}`);
       if (!existing) throw createError;
       supabaseUserId = existing.id;
     } else {
       supabaseUserId = createData.user.id;
     }
 
-    // Create or update Prisma User
+    // 2. Create Prisma user
     await prisma.user.upsert({
       where: { phone: from },
-      create: {
-        id: supabaseUserId,
-        email: placeholderEmail,
-        name: data.ownerName,
-        phone: from,
-        plan: "FREE",
-      },
-      update: { name: data.ownerName },
+      create: { id: supabaseUserId, email: placeholderEmail, phone: from, plan: "FREE" },
+      update: {},
     });
 
     const user = await prisma.user.findUniqueOrThrow({ where: { phone: from } });
 
-    // Create Brand
-    await prisma.brand.create({
+    // 3. Create brand
+    const brand = await prisma.brand.create({
       data: {
         userId: user.id,
-        name: data.businessName!,
-        category: data.category ?? null,
-        description: data.description ?? null,
+        name: businessName,
+        category,
         onboardingCompleted: true,
       },
     });
 
-    // Create Settings
+    // 4. Create settings
     await prisma.settings.upsert({
       where: { userId: user.id },
-      create: {
-        userId: user.id,
-        whatsappConnected: true,
-        whatsappOwnerPhone: from,
-      },
-      update: {
-        whatsappConnected: true,
-        whatsappOwnerPhone: from,
-      },
+      create: { userId: user.id, whatsappConnected: true, whatsappOwnerPhone: from },
+      update: { whatsappConnected: true, whatsappOwnerPhone: from },
     });
 
-    // Clean up onboarding session
-    await prisma.onboardingSession.delete({ where: { phone: from } }).catch(() => {});
+    // 5. Generate 3 posts with Claude (text only, fast ~3s)
+    const posts = await generateWelcomePosts(businessName, category);
 
-    await sendText(
-      from,
-      `🎉 *Welcome to StatusCraft, ${data.ownerName}!*\n\n` +
-        `Your account for *${data.businessName}* is ready!\n\n` +
-        `Here's what happens next:\n` +
-        `📱 Every morning I'll send you 3 AI-crafted posts\n` +
-        `✅ Approve them with a tap\n` +
-        `🚀 They go out as your WhatsApp Status automatically\n\n` +
-        `To get your first posts now, send me a *voice note* describing any product or offer you want to promote! 🎙️\n\n` +
-        `_(Want the web dashboard too? Visit statuscraft.in → sign in with your phone number *+${from}* and the OTP we'll send here)_`
+    // 6. Save as drafts
+    const saved = await Promise.all(
+      posts.map(p =>
+        prisma.post.create({
+          data: {
+            brandId: brand.id,
+            type: "PRODUCT",
+            status: "DRAFT",
+            tonality: "INFORMATIVE",
+            headline: p.headline,
+            bodyText: p.bodyText,
+            ctaText: p.ctaText,
+          },
+        })
+      )
     );
-  } catch (e) {
-    console.error("[Onboarding] createAccount error:", e);
+
+    // 7. Clean up onboarding session
+    await clearSession(from);
+
+    // 8. Send success message
     await sendText(
       from,
-      "Sorry, something went wrong creating your account 😔 Please try again in a moment, or contact us for help."
+      `🎉 *Welcome to StatusCraft!*\n\n*${businessName}* is live.\n\nHere are your first 3 posts — approve the ones you like 👇`
+    );
+
+    // 9. Send each post with Approve / Discard buttons
+    for (let i = 0; i < posts.length; i++) {
+      const p = posts[i];
+      const s = saved[i];
+      const caption =
+        `*Post ${i + 1} of 3*\n\n` +
+        `📰 *${p.headline}*\n\n` +
+        `${p.bodyText}\n\n` +
+        `👉 ${p.ctaText}`;
+
+      await sendButtons(from, `Post ${i + 1}`, caption, [
+        { id: `approve:${s.id}`, title: "✅ Approve" },
+        { id: `reject:${s.id}`,  title: "❌ Discard"  },
+      ]);
+
+      // Small delay so messages arrive in order
+      await new Promise(r => setTimeout(r, 800));
+    }
+
+    // 10. Send closing tip
+    await sendText(
+      from,
+      `That's it! 🚀\n\n*Your StatusCraft commands:*\n• Send a *voice note* anytime → instant new post\n• Reply *today* → see today's posts\n• Reply *help* → all commands\n\nEvery morning I'll automatically create 3 fresh posts for you. 🌅`
+    );
+
+  } catch (err: any) {
+    console.error("[WA Onboarding] createAccount error:", err);
+    await clearSession(from);
+    await sendText(
+      from,
+      "Sorry, something went wrong setting up your account 😔 Please message us again in a moment."
     );
   }
 }
 
-async function updateSession(phone: string, step: string, data: OnboardingData) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const jsonData = data as any;
-  await prisma.onboardingSession.upsert({
-    where: { phone },
-    create: { phone, step, data: jsonData },
-    update: { step, data: jsonData, updatedAt: new Date() },
-  });
+async function generateWelcomePosts(
+  businessName: string,
+  category: string
+): Promise<Array<{ headline: string; bodyText: string; ctaText: string }>> {
+  try {
+    const res = await anthropic.messages.create({
+      model: "claude-haiku-4-5",
+      max_tokens: 700,
+      messages: [{
+        role: "user",
+        content: `Create 3 WhatsApp Status posts for "${businessName}", a ${category} business in India.
+
+Return JSON array only (no markdown):
+[
+  { "headline": "max 8 words", "bodyText": "2-3 sentences, 1-2 emojis, sounds natural in Indian English", "ctaText": "max 5 words" },
+  { ... },
+  { ... }
+]
+
+Make them varied: one promotional, one engagement, one seasonal/festive.`,
+      }],
+    });
+
+    const text = res.content[0].type === "text" ? res.content[0].text : "[]";
+    const match = text.match(/\[[\s\S]*\]/);
+    if (match) return JSON.parse(match[0]);
+  } catch (e) {
+    console.error("[generateWelcomePosts]", e);
+  }
+
+  // Fallback
+  return [
+    { headline: `${businessName} — Fresh Today!`, bodyText: `✨ Visit ${businessName} for the best quality. We're open and ready to serve you!`, ctaText: "Visit Us Today" },
+    { headline: "Special Offer This Week",         bodyText: `🎁 Exciting deals at ${businessName} this week only. Limited time — don't miss out!`, ctaText: "Grab the Deal" },
+    { headline: "Thank You for Your Support",      bodyText: `💚 Because of you, ${businessName} keeps growing. Share this with a friend who'd love us!`, ctaText: "Tell a Friend" },
+  ];
 }

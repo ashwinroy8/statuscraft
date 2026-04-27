@@ -1,436 +1,436 @@
 "use client";
 
+import { useState, useRef, useEffect } from "react";
+import { motion, AnimatePresence, useInView } from "framer-motion";
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
-import { AnimatePresence, motion, useInView, useMotionValue, useSpring } from "framer-motion";
 import {
-  Zap,
-  Mic,
-  Bot,
-  ShoppingCart,
-  Sparkles,
-  BarChart2,
-  Check,
-  ArrowRight,
-  Star,
-  Globe,
-  ChevronDown,
+  Zap, ArrowRight, Check, Star, Mic, Sparkles,
+  Globe, ChevronDown, Play, Bot, ShoppingCart, BarChart2, Camera,
 } from "lucide-react";
+import QuickSignup from "@/components/signup/QuickSignup";
 
-// ── TRANSLATIONS ────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// ANIMATED NUMBER
+// ─────────────────────────────────────────────────────────────────────────────
 
-type LangCode = "en" | "hi" | "ta" | "te" | "mr" | "bn" | "gu" | "kn" | "ml" | "pa";
+function Count({ to, suffix = "" }: { to: number; suffix?: string }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const inView = useInView(ref, { once: true });
+  const [val, setVal] = useState(0);
 
-interface Translations {
-  heroLine1: string;
-  heroLine2: string;
-  heroSub: string;
-  ctaPrimary: string;
-  ctaSecondary: string;
-  badge1: string;
-  badge2: string;
-  badge3: string;
-  step1Title: string;
-  step1Desc: string;
-  step2Title: string;
-  step2Desc: string;
-  step3Title: string;
-  step3Desc: string;
-  startFree: string;
-  startPro: string;
+  useEffect(() => {
+    if (!inView) return;
+    let start = 0;
+    const step = Math.ceil(to / 60);
+    const id = setInterval(() => {
+      start = Math.min(start + step, to);
+      setVal(start);
+      if (start >= to) clearInterval(id);
+    }, 16);
+    return () => clearInterval(id);
+  }, [inView, to]);
+
+  return <span ref={ref}>{val.toLocaleString("en-IN")}{suffix}</span>;
 }
 
-const TRANSLATIONS: Record<LangCode, Translations> = {
-  en: {
-    heroLine1: "Your business speaks.",
-    heroLine2: "We turn it into WhatsApp Status posts.",
-    heroSub: "Send a 10-second voice note. Get 3 stunning posts — in Hindi, Hinglish, or English — ready to go live. India's small businesses deserve marketing that works like they do.",
-    ctaPrimary: "Start for free",
-    ctaSecondary: "Watch how it works",
-    badge1: "No credit card",
-    badge2: "Hindi & English",
-    badge3: "Free forever plan",
-    step1Title: "Speak your offer",
-    step1Desc: "Record a 10-second voice note on WhatsApp. Hindi, Hinglish, Tamil — whatever feels natural.",
-    step2Title: "AI creates 3 posts",
-    step2Desc: "Claude AI writes the copy, generates the image, adds your logo and brand colours automatically.",
-    step3Title: "Approve & go live",
-    step3Desc: "Reply APPROVE on WhatsApp. Your status goes live. Customers start replying.",
-    startFree: "Start Free",
-    startPro: "Start Pro Trial",
-  },
-  hi: {
-    heroLine1: "आपका व्यापार बोलता है।",
-    heroLine2: "हम इसे WhatsApp Status पोस्ट में बदलते हैं।",
-    heroSub: "10 सेकंड का voice note भेजें। 3 शानदार पोस्ट मिलें — हिंदी, Hinglish या अंग्रेजी में — तुरंत live होने के लिए तैयार।",
-    ctaPrimary: "मुफ्त शुरू करें",
-    ctaSecondary: "देखें कैसे काम करता है",
-    badge1: "कोई क्रेडिट कार्ड नहीं",
-    badge2: "हिंदी और अंग्रेजी",
-    badge3: "हमेशा के लिए मुफ्त प्लान",
-    step1Title: "अपना ऑफर बोलें",
-    step1Desc: "WhatsApp पर 10 सेकंड का voice note रिकॉर्ड करें। हिंदी, Hinglish, तमिल — जो भी स्वाभाविक लगे।",
-    step2Title: "AI 3 पोस्ट बनाता है",
-    step2Desc: "Claude AI कॉपी लिखता है, इमेज बनाता है, आपका लोगो और ब्रांड रंग अपने आप जोड़ता है।",
-    step3Title: "Approve करें और live जाएं",
-    step3Desc: "WhatsApp पर APPROVE reply करें। आपका status live हो जाता है। ग्राहक reply करने लगते हैं।",
-    startFree: "मुफ्त शुरू करें",
-    startPro: "Pro Trial शुरू करें",
-  },
-  ta: {
-    heroLine1: "உங்கள் தொழில் பேசுகிறது.",
-    heroLine2: "நாங்கள் அதை WhatsApp Status பதிவுகளாக மாற்றுகிறோம்.",
-    heroSub: "10 நொடி voice note அனுப்புங்கள். 3 அற்புதமான பதிவுகள் பெறுங்கள் — தமிழ், Hinglish அல்லது ஆங்கிலத்தில் — உடனே live ஆக தயார்.",
-    ctaPrimary: "இலவசமாக தொடங்குங்கள்",
-    ctaSecondary: "எப்படி வேலை செய்கிறது என்று பாருங்கள்",
-    badge1: "கிரெடிட் கார்டு தேவையில்லை",
-    badge2: "தமிழ் மற்றும் ஆங்கிலம்",
-    badge3: "என்றென்றும் இலவச திட்டம்",
-    step1Title: "உங்கள் சலுகையை சொல்லுங்கள்",
-    step1Desc: "WhatsApp-ல் 10 நொடி voice note record செய்யுங்கள். தமிழ், Hinglish — எதுவாக வேண்டுமானாலும்.",
-    step2Title: "AI 3 பதிவுகள் உருவாக்குகிறது",
-    step2Desc: "Claude AI copy எழுதுகிறது, image உருவாக்குகிறது, உங்கள் logo மற்றும் brand நிறங்களை தானாகவே சேர்க்கிறது.",
-    step3Title: "Approve செய்து live ஆகுங்கள்",
-    step3Desc: "WhatsApp-ல் APPROVE என்று reply செய்யுங்கள். உங்கள் status live ஆகிவிடும். வாடிக்கையாளர்கள் reply செய்யத் தொடங்குவார்கள்.",
-    startFree: "இலவசமாக தொடங்குங்கள்",
-    startPro: "Pro Trial தொடங்குங்கள்",
-  },
-  te: {
-    heroLine1: "మీ వ్యాపారం మాట్లాడుతుంది.",
-    heroLine2: "మేము దానిని WhatsApp Status పోస్ట్‌లుగా మారుస్తాము.",
-    heroSub: "10 సెకన్ల voice note పంపండి. 3 అద్భుతమైన పోస్ట్‌లు పొందండి — తెలుగు, Hinglish లేదా ఇంగ్లీష్‌లో — వెంటనే live కి సిద్ధంగా.",
-    ctaPrimary: "ఉచితంగా ప్రారంభించండి",
-    ctaSecondary: "ఎలా పని చేస్తుందో చూడండి",
-    badge1: "క్రెడిట్ కార్డు అవసరం లేదు",
-    badge2: "తెలుగు & ఇంగ్లీష్",
-    badge3: "ఎప్పటికీ ఉచిత ప్లాన్",
-    step1Title: "మీ ఆఫర్ చెప్పండి",
-    step1Desc: "WhatsApp లో 10 సెకన్ల voice note రికార్డ్ చేయండి. తెలుగు, Hinglish — ఏదైనా సరే.",
-    step2Title: "AI 3 పోస్ట్‌లు సృష్టిస్తుంది",
-    step2Desc: "Claude AI కాపీ రాస్తుంది, ఇమేజ్ తయారు చేస్తుంది, మీ లోగో మరియు బ్రాండ్ రంగులు స్వయంచాలకంగా జోడిస్తుంది.",
-    step3Title: "Approve చేసి live అవ్వండి",
-    step3Desc: "WhatsApp లో APPROVE అని reply చేయండి. మీ status live అవుతుంది. కస్టమర్లు reply చేయడం మొదలుపెడతారు.",
-    startFree: "ఉచితంగా ప్రారంభించండి",
-    startPro: "Pro Trial ప్రారంభించండి",
-  },
-  mr: {
-    heroLine1: "तुमचा व्यवसाय बोलतो.",
-    heroLine2: "आम्ही त्याला WhatsApp Status पोस्ट बनवतो.",
-    heroSub: "10 सेकंदाची voice note पाठवा. 3 अप्रतिम पोस्ट मिळवा — मराठी, Hinglish किंवा इंग्रजीत — लगेच live होण्यासाठी तयार.",
-    ctaPrimary: "मोफत सुरू करा",
-    ctaSecondary: "कसे काम करते ते पाहा",
-    badge1: "क्रेडिट कार्ड नको",
-    badge2: "मराठी आणि इंग्रजी",
-    badge3: "कायमचा मोफत प्लान",
-    step1Title: "तुमची ऑफर सांगा",
-    step1Desc: "WhatsApp वर 10 सेकंदाची voice note रेकॉर्ड करा. मराठी, Hinglish, हिंदी — जे नैसर्गिक वाटेल ते.",
-    step2Title: "AI 3 पोस्ट तयार करते",
-    step2Desc: "Claude AI कॉपी लिहितो, इमेज तयार करतो, तुमचा लोगो आणि ब्रँड रंग आपोआप जोडतो.",
-    step3Title: "Approve करा आणि live व्हा",
-    step3Desc: "WhatsApp वर APPROVE reply करा. तुमचा status live होतो. ग्राहक reply करू लागतात.",
-    startFree: "मोफत सुरू करा",
-    startPro: "Pro Trial सुरू करा",
-  },
-  bn: {
-    heroLine1: "আপনার ব্যবসা কথা বলে।",
-    heroLine2: "আমরা এটিকে WhatsApp Status পোস্টে পরিণত করি।",
-    heroSub: "১০ সেকেন্ডের voice note পাঠান। ৩টি দুর্দান্ত পোস্ট পান — বাংলা, Hinglish বা ইংরেজিতে — সাথে সাথে live হওয়ার জন্য প্রস্তুত।",
-    ctaPrimary: "বিনামূল্যে শুরু করুন",
-    ctaSecondary: "কীভাবে কাজ করে দেখুন",
-    badge1: "ক্রেডিট কার্ড লাগবে না",
-    badge2: "বাংলা ও ইংরেজি",
-    badge3: "চিরকালের জন্য বিনামূল্যে প্ল্যান",
-    step1Title: "আপনার অফার বলুন",
-    step1Desc: "WhatsApp-এ ১০ সেকেন্ডের voice note রেকর্ড করুন। বাংলা, Hinglish — যা স্বাভাবিক মনে হয়।",
-    step2Title: "AI ৩টি পোস্ট তৈরি করে",
-    step2Desc: "Claude AI কপি লেখে, ছবি তৈরি করে, আপনার লোগো এবং ব্র্যান্ড রঙ স্বয়ংক্রিয়ভাবে যোগ করে।",
-    step3Title: "Approve করুন এবং live হন",
-    step3Desc: "WhatsApp-এ APPROVE reply করুন। আপনার status live হয়ে যায়। গ্রাহকরা reply করতে শুরু করেন।",
-    startFree: "বিনামূল্যে শুরু করুন",
-    startPro: "Pro Trial শুরু করুন",
-  },
-  gu: {
-    heroLine1: "તમારો ધંધો બોલે છે.",
-    heroLine2: "અમે તેને WhatsApp Status પોસ્ટ બનાવીએ છીએ.",
-    heroSub: "10 સેકન્ડની voice note મોકલો. 3 અદ્ભુત પોસ્ટ મેળવો — ગુજરાતી, Hinglish અથવા અંગ્રેજીમાં — તરત live થવા માટે તૈયાર.",
-    ctaPrimary: "મફતમાં શરૂ કરો",
-    ctaSecondary: "કેવી રીતે કામ કરે છે જુઓ",
-    badge1: "ક્રેડિટ કાર્ડ નહીં",
-    badge2: "ગુજરાતી અને અંગ્રેજી",
-    badge3: "હંમેશ માટે મફત પ્લાન",
-    step1Title: "તમારી ઓફર બોલો",
-    step1Desc: "WhatsApp પર 10 સેકન્ડની voice note રેકોર્ડ કરો. ગુજરાતી, Hinglish — જે સ્વાભાવિક લાગે.",
-    step2Title: "AI 3 પોસ્ટ બનાવે છે",
-    step2Desc: "Claude AI કોપી લખે છે, ઇમેજ બનાવે છે, તમારો લોગો અને બ્રાન્ડ રંગ આપોઆપ ઉમેરે છે.",
-    step3Title: "Approve કરો અને live જાઓ",
-    step3Desc: "WhatsApp પર APPROVE reply કરો. તમારો status live થઈ જાય છે. ગ્રાહકો reply કરવા લાગે છે.",
-    startFree: "મફતમાં શરૂ કરો",
-    startPro: "Pro Trial શરૂ કરો",
-  },
-  kn: {
-    heroLine1: "ನಿಮ್ಮ ವ್ಯವಸಾಯ ಮಾತನಾಡುತ್ತದೆ.",
-    heroLine2: "ನಾವು ಅದನ್ನು WhatsApp Status ಪೋಸ್ಟ್‌ಗಳನ್ನಾಗಿ ಮಾಡುತ್ತೇವೆ.",
-    heroSub: "10 ಸೆಕೆಂಡ್ voice note ಕಳುಹಿಸಿ. 3 ಅದ್ಭುತ ಪೋಸ್ಟ್‌ಗಳನ್ನು ಪಡೆಯಿರಿ — ಕನ್ನಡ, Hinglish ಅಥವಾ ಇಂಗ್ಲೀಷ್‌ನಲ್ಲಿ — ತಕ್ಷಣ live ಆಗಲು ಸಿದ್ಧ.",
-    ctaPrimary: "ಉಚಿತವಾಗಿ ಪ್ರಾರಂಭಿಸಿ",
-    ctaSecondary: "ಹೇಗೆ ಕೆಲಸ ಮಾಡುತ್ತದೆ ನೋಡಿ",
-    badge1: "ಕ್ರೆಡಿಟ್ ಕಾರ್ಡ್ ಬೇಡ",
-    badge2: "ಕನ್ನಡ ಮತ್ತು ಇಂಗ್ಲೀಷ್",
-    badge3: "ಯಾವಾಗಲೂ ಉಚಿತ ಯೋಜನೆ",
-    step1Title: "ನಿಮ್ಮ ಆಫರ್ ಹೇಳಿ",
-    step1Desc: "WhatsApp ನಲ್ಲಿ 10 ಸೆಕೆಂಡ್ voice note ರೆಕಾರ್ಡ್ ಮಾಡಿ. ಕನ್ನಡ, Hinglish — ಯಾವುದು ಸ್ವಾಭಾವಿಕ ಅನ್ನಿಸುತ್ತದೆ.",
-    step2Title: "AI 3 ಪೋಸ್ಟ್ ತಯಾರಿಸುತ್ತದೆ",
-    step2Desc: "Claude AI ಕಾಪಿ ಬರೆಯುತ್ತದೆ, ಇಮೇಜ್ ಮಾಡುತ್ತದೆ, ನಿಮ್ಮ ಲೋಗೋ ಮತ್ತು ಬ್ರ್ಯಾಂಡ್ ಬಣ್ಣಗಳನ್ನು ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಸೇರಿಸುತ್ತದೆ.",
-    step3Title: "Approve ಮಾಡಿ live ಆಗಿ",
-    step3Desc: "WhatsApp ನಲ್ಲಿ APPROVE reply ಮಾಡಿ. ನಿಮ್ಮ status live ಆಗುತ್ತದೆ. ಗ್ರಾಹಕರು reply ಮಾಡಲು ಶುರು ಮಾಡುತ್ತಾರೆ.",
-    startFree: "ಉಚಿತವಾಗಿ ಪ್ರಾರಂಭಿಸಿ",
-    startPro: "Pro Trial ಪ್ರಾರಂಭಿಸಿ",
-  },
-  ml: {
-    heroLine1: "നിങ്ങളുടെ ബിസിനസ് സംസാരിക്കുന്നു.",
-    heroLine2: "ഞങ്ങൾ അത് WhatsApp Status പോസ്റ്റുകളാക്കുന്നു.",
-    heroSub: "10 സെക്കൻഡ് voice note അയക്കൂ. 3 ആകർഷണീയ പോസ്റ്റുകൾ നേടൂ — മലയാളം, Hinglish അല്ലെങ്കിൽ ഇംഗ്ലീഷിൽ — ഉടൻ live ആകാൻ തയ്യാർ.",
-    ctaPrimary: "സൗജന്യമായി ആരംഭിക്കൂ",
-    ctaSecondary: "എങ്ങനെ പ്രവർത്തിക്കുന്നുവെന്ന് കാണൂ",
-    badge1: "ക്രെഡിറ്റ് കാർഡ് വേണ്ട",
-    badge2: "മലയാളം & ഇംഗ്ലീഷ്",
-    badge3: "എക്കാലവും സൗജന്യ പ്ലാൻ",
-    step1Title: "നിങ്ങളുടെ ഓഫർ പറയൂ",
-    step1Desc: "WhatsApp-ൽ 10 സെക്കൻഡ് voice note റെക്കോർഡ് ചെയ്യൂ. മലയാളം, Hinglish — എന്ത് സ്വാഭാവികമായി തോന്നുന്നോ.",
-    step2Title: "AI 3 പോസ്റ്റ് ഉണ്ടാക്കുന്നു",
-    step2Desc: "Claude AI കോപ്പി എഴുതുന്നു, ഇമേജ് ഉണ്ടാക്കുന്നു, നിങ്ങളുടെ ലോഗോ, ബ്രാൻഡ് നിറങ്ങൾ സ്വയം ചേർക്കുന്നു.",
-    step3Title: "Approve ചെയ്ത് live ആകൂ",
-    step3Desc: "WhatsApp-ൽ APPROVE reply ചെയ്യൂ. നിങ്ങളുടെ status live ആകുന്നു. ഉപഭോക്താക്കൾ reply ചെയ്യാൻ തുടങ്ങുന്നു.",
-    startFree: "സൗജന്യമായി ആരംഭിക്കൂ",
-    startPro: "Pro Trial ആരംഭിക്കൂ",
-  },
-  pa: {
-    heroLine1: "ਤੁਹਾਡਾ ਕਾਰੋਬਾਰ ਬੋਲਦਾ ਹੈ।",
-    heroLine2: "ਅਸੀਂ ਇਸਨੂੰ WhatsApp Status ਪੋਸਟਾਂ ਵਿੱਚ ਬਦਲਦੇ ਹਾਂ।",
-    heroSub: "10 ਸਕਿੰਟ ਦੀ voice note ਭੇਜੋ। 3 ਸ਼ਾਨਦਾਰ ਪੋਸਟਾਂ ਪ੍ਰਾਪਤ ਕਰੋ — ਪੰਜਾਬੀ, Hinglish ਜਾਂ ਅੰਗ੍ਰੇਜ਼ੀ ਵਿੱਚ — ਤੁਰੰਤ live ਹੋਣ ਲਈ ਤਿਆਰ।",
-    ctaPrimary: "ਮੁਫ਼ਤ ਸ਼ੁਰੂ ਕਰੋ",
-    ctaSecondary: "ਕਿਵੇਂ ਕੰਮ ਕਰਦਾ ਹੈ ਦੇਖੋ",
-    badge1: "ਕ੍ਰੈਡਿਟ ਕਾਰਡ ਨਹੀਂ",
-    badge2: "ਪੰਜਾਬੀ ਅਤੇ ਅੰਗ੍ਰੇਜ਼ੀ",
-    badge3: "ਹਮੇਸ਼ਾ ਲਈ ਮੁਫ਼ਤ ਯੋਜਨਾ",
-    step1Title: "ਆਪਣੀ ਪੇਸ਼ਕਸ਼ ਦੱਸੋ",
-    step1Desc: "WhatsApp ਤੇ 10 ਸਕਿੰਟ ਦੀ voice note ਰਿਕਾਰਡ ਕਰੋ। ਪੰਜਾਬੀ, Hinglish — ਜੋ ਵੀ ਕੁਦਰਤੀ ਲੱਗੇ।",
-    step2Title: "AI 3 ਪੋਸਟਾਂ ਬਣਾਉਂਦਾ ਹੈ",
-    step2Desc: "Claude AI ਕਾਪੀ ਲਿਖਦਾ ਹੈ, ਤਸਵੀਰ ਬਣਾਉਂਦਾ ਹੈ, ਤੁਹਾਡਾ ਲੋਗੋ ਅਤੇ ਬ੍ਰਾਂਡ ਰੰਗ ਆਪਣੇ ਆਪ ਜੋੜਦਾ ਹੈ।",
-    step3Title: "Approve ਕਰੋ ਅਤੇ live ਜਾਓ",
-    step3Desc: "WhatsApp ਤੇ APPROVE reply ਕਰੋ। ਤੁਹਾਡਾ status live ਹੋ ਜਾਂਦਾ ਹੈ। ਗਾਹਕ reply ਕਰਨ ਲੱਗਦੇ ਹਨ।",
-    startFree: "ਮੁਫ਼ਤ ਸ਼ੁਰੂ ਕਰੋ",
-    startPro: "Pro Trial ਸ਼ੁਰੂ ਕਰੋ",
-  },
-};
+// ─────────────────────────────────────────────────────────────────────────────
+// PHONE DEMO
+// ─────────────────────────────────────────────────────────────────────────────
 
-const LANG_NAMES: Record<LangCode, string> = {
-  en: "English",
-  hi: "हिंदी",
-  ta: "தமிழ்",
-  te: "తెలుగు",
-  mr: "मराठी",
-  bn: "বাংলা",
-  gu: "ગુજરાતી",
-  kn: "ಕನ್ನಡ",
-  ml: "മലയാളം",
-  pa: "ਪੰਜਾਬੀ",
-};
+const DEMO_POSTS = [
+  {
+    label: "Hindi",
+    bg: "from-orange-500/10 to-transparent",
+    border: "border-orange-500/20",
+    dot: "#f97316",
+    headline: "आज स्पेशल थाली — सिर्फ ₹120!",
+    body: "गरमागरम खाना, घर जैसा स्वाद 🍛 आज ही आएं और मुँह में पानी लाने वाली थाली का आनंद लें!",
+    cta: "अभी ऑर्डर करें",
+  },
+  {
+    label: "Hinglish",
+    bg: "from-green-500/10 to-transparent",
+    border: "border-green-500/20",
+    dot: "#25D366",
+    headline: "Today's Special — Only ₹120!",
+    body: "Ghar jaisa khaana, restaurant jaisi feeling ✨ Aaj hi try karo hamari special thali!",
+    cta: "Order Now",
+  },
+  {
+    label: "English",
+    bg: "from-purple-500/10 to-transparent",
+    border: "border-purple-500/20",
+    dot: "#a855f7",
+    headline: "Lunch Special — Just ₹120!",
+    body: "Fresh, home-style cooking served hot 🔥 Join us today for our famous thali — limited seats!",
+    cta: "Book a Table",
+  },
+];
 
-const REGION_TO_LANG: Record<string, LangCode> = {
-  MH: "mr",
-  TN: "ta",
-  KA: "kn",
-  KL: "ml",
-  WB: "bn",
-  AS: "bn",
-  AP: "te",
-  TS: "te",
-  PB: "pa",
-  GJ: "gu",
-  UP: "hi",
-  MP: "hi",
-  RJ: "hi",
-  BR: "hi",
-  HR: "hi",
-  DL: "hi",
-  UK: "hi",
-  HP: "hi",
-  JH: "hi",
-  CG: "hi",
-  UA: "hi",
-  CT: "hi",
-};
-
-// ── ANIMATED COUNTER ─────────────────────────────────────────────────────────
-
-function AnimatedCounter({ value, suffix = "" }: { value: number; suffix?: string }) {
-  const ref = useRef<HTMLSpanElement>(null);
-  const inView = useInView(ref, { once: true, margin: "-50px" });
-  const motionVal = useMotionValue(0);
-  const spring = useSpring(motionVal, { damping: 30, stiffness: 80 });
-  const [display, setDisplay] = useState(0);
+function PhoneDemo() {
+  const [active, setActive] = useState(0);
+  const [phase, setPhase] = useState<"voice" | "generating" | "done">("voice");
 
   useEffect(() => {
-    if (inView) motionVal.set(value);
-  }, [inView, motionVal, value]);
+    const t1 = setTimeout(() => setPhase("generating"), 1800);
+    const t2 = setTimeout(() => setPhase("done"), 3600);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, []);
 
   useEffect(() => {
-    const unsub = spring.on("change", (v) => setDisplay(Math.round(v)));
-    return unsub;
-  }, [spring]);
+    if (phase !== "done") return;
+    const t = setInterval(() => setActive((a) => (a + 1) % DEMO_POSTS.length), 2800);
+    return () => clearInterval(t);
+  }, [phase]);
+
+  const post = DEMO_POSTS[active];
 
   return (
-    <span ref={ref}>
-      {display.toLocaleString("en-IN")}
-      {suffix}
-    </span>
+    <div className="relative select-none" style={{ width: 280 }}>
+      {/* Glow */}
+      <div className="absolute inset-0 -z-10" style={{
+        background: "radial-gradient(ellipse at 50% 50%, rgba(37,211,102,0.15) 0%, transparent 70%)",
+        filter: "blur(40px)",
+        transform: "scale(1.4)",
+      }} />
+
+      {/* Phone */}
+      <div className="rounded-[2.8rem] border border-white/10 overflow-hidden shadow-2xl" style={{
+        background: "#0c0c0e",
+        boxShadow: "0 0 0 1px rgba(255,255,255,0.04), 0 40px 80px rgba(0,0,0,0.7)",
+      }}>
+        {/* Notch */}
+        <div className="flex justify-center py-3">
+          <div className="w-24 h-5 rounded-full bg-black" />
+        </div>
+
+        <div className="px-4 pb-7 space-y-3" style={{ minHeight: 460 }}>
+
+          {/* WhatsApp top bar */}
+          <div className="flex items-center gap-2 py-1">
+            <div className="w-7 h-7 rounded-full bg-[#25D366] flex items-center justify-center text-black font-bold text-[10px]">SC</div>
+            <div>
+              <p className="text-[11px] font-semibold text-white leading-none">StatusCraft AI</p>
+              <p className="text-[9px] text-[#25D366] mt-0.5">● online</p>
+            </div>
+          </div>
+
+          {/* Incoming voice bubble */}
+          <div className="flex justify-end">
+            <div className="bg-[#25D366]/15 border border-[#25D366]/25 rounded-2xl rounded-br-sm px-3 py-2">
+              <div className="flex items-center gap-1.5">
+                <Mic className="w-3 h-3 text-[#25D366]" />
+                {[3,5,4,6,3,5,4].map((h, i) => (
+                  <motion.div
+                    key={i}
+                    className="w-0.5 rounded-full bg-[#25D366]"
+                    animate={{ height: phase === "voice" ? [`${h*2}px`, `${h*4}px`, `${h*2}px`] : `${h*2}px` }}
+                    transition={{ duration: 0.7, repeat: phase === "voice" ? Infinity : 0, delay: i * 0.1 }}
+                  />
+                ))}
+                <span className="text-[9px] text-[#8b8b9a]">0:09</span>
+              </div>
+            </div>
+          </div>
+
+          {/* AI response */}
+          <AnimatePresence>
+            {phase === "generating" && (
+              <motion.div
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex items-center gap-2 bg-white/[0.04] rounded-2xl rounded-bl-sm px-3 py-2.5"
+              >
+                <Loader />
+                <span className="text-[10px] text-[#8b8b9a]">Creating 3 posts…</span>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {phase === "done" && (
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-white/[0.03] rounded-2xl rounded-bl-sm px-3 py-2.5"
+            >
+              <p className="text-[10px] text-white font-medium mb-2">✅ 3 posts ready! Choose your language:</p>
+              <div className="flex gap-1.5 mb-3">
+                {DEMO_POSTS.map((p, i) => (
+                  <button
+                    key={p.label}
+                    onClick={() => setActive(i)}
+                    className="text-[9px] font-semibold px-2 py-0.5 rounded-full transition-all"
+                    style={{
+                      background: i === active ? p.dot : "rgba(255,255,255,0.05)",
+                      color: i === active ? "#000" : "#8b8b9a",
+                    }}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Post card */}
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={active}
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  transition={{ duration: 0.25 }}
+                  className={`rounded-xl border bg-gradient-to-b ${post.bg} ${post.border} p-3`}
+                >
+                  <p className="text-[11px] font-bold text-white mb-1">{post.headline}</p>
+                  <p className="text-[9px] text-[#8b8b9a] leading-relaxed mb-2">{post.body}</p>
+                  <span
+                    className="inline-block text-[9px] font-bold px-2 py-0.5 rounded-full text-black"
+                    style={{ background: post.dot }}
+                  >
+                    {post.cta}
+                  </span>
+                </motion.div>
+              </AnimatePresence>
+            </motion.div>
+          )}
+
+          {/* Reply from customer */}
+          {phase === "done" && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 1.2 }}
+              className="space-y-2"
+            >
+              <div className="flex justify-end">
+                <div className="bg-[#1a1a1f] rounded-xl rounded-tr-sm px-3 py-1.5 max-w-[80%]">
+                  <p className="text-[9px] text-white">Bhai ek thali pack karke rakhna 🙏</p>
+                </div>
+              </div>
+              <div className="flex justify-end">
+                <div className="bg-[#25D366]/15 rounded-xl rounded-br-sm px-3 py-1.5">
+                  <p className="text-[9px] text-white">Done! Aapka order confirm ✅</p>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </div>
+      </div>
+
+      {/* Floating badges */}
+      <motion.div
+        animate={{ y: [0, -6, 0] }}
+        transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+        className="absolute -right-8 top-20 bg-[#25D366] text-black text-[9px] font-bold px-2.5 py-1.5 rounded-xl shadow-lg whitespace-nowrap"
+        style={{ boxShadow: "0 4px 20px rgba(37,211,102,0.45)" }}
+      >
+        ✅ Post approved!
+      </motion.div>
+
+      <motion.div
+        animate={{ y: [0, -8, 0] }}
+        transition={{ duration: 3.5, repeat: Infinity, ease: "easeInOut", delay: 1 }}
+        className="absolute -left-10 bottom-28 bg-[#0f0f11] border border-white/10 text-[9px] px-2.5 py-1.5 rounded-xl shadow-lg whitespace-nowrap"
+      >
+        <span className="text-[#8b8b9a]">5 new replies </span>
+        <span className="text-[#25D366] font-bold">→ orders</span>
+      </motion.div>
+    </div>
   );
 }
 
-// ── MAIN COMPONENT ───────────────────────────────────────────────────────────
+function Loader() {
+  return (
+    <div className="flex gap-1">
+      {[0, 1, 2].map((i) => (
+        <motion.div
+          key={i}
+          className="w-1 h-1 rounded-full bg-[#25D366]"
+          animate={{ opacity: [0.3, 1, 0.3] }}
+          transition={{ duration: 1, repeat: Infinity, delay: i * 0.2 }}
+        />
+      ))}
+    </div>
+  );
+}
 
-export default function LandingPage() {
-  const [lang, setLang] = useState<LangCode>("en");
-  const [langDropdownOpen, setLangDropdownOpen] = useState(false);
-  const [showLangBanner, setShowLangBanner] = useState(false);
-  const [autoDetectedLang, setAutoDetectedLang] = useState<LangCode | null>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+// ─────────────────────────────────────────────────────────────────────────────
+// LANGUAGE SWITCHER DATA
+// ─────────────────────────────────────────────────────────────────────────────
 
-  // Auto-detect language
+type Lang = "en" | "hi" | "ta" | "te" | "mr" | "bn" | "gu" | "kn" | "ml" | "pa";
+
+const LANGS: Record<Lang, string> = {
+  en: "English", hi: "हिंदी", ta: "தமிழ்", te: "తెలుగు",
+  mr: "मराठी", bn: "বাংলা", gu: "ગુજરાતી", kn: "ಕನ್ನಡ", ml: "മലയാളം", pa: "ਪੰਜਾਬੀ",
+};
+
+const HERO: Record<Lang, { h1: string; h2: string; sub: string; cta: string }> = {
+  en: {
+    h1: "Your business, marketing itself.",
+    h2: "On WhatsApp. In 30 seconds.",
+    sub: "Send a voice note. Get 3 ready-to-post designs for your WhatsApp Status — written by AI, in Hindi, Hinglish, or English. No designer. No agency. Just results.",
+    cta: "Start free — see posts in 90 seconds",
+  },
+  hi: {
+    h1: "आपका व्यापार, खुद की मार्केटिंग।",
+    h2: "WhatsApp पर। 30 सेकंड में।",
+    sub: "Voice note भेजें। 3 posts तैयार मिलें — हिंदी, Hinglish, या अंग्रेजी में। कोई designer नहीं, कोई agency नहीं।",
+    cta: "मुफ्त शुरू करें",
+  },
+  ta: {
+    h1: "உங்கள் தொழில், தன்னை மார்க்கெட் செய்கிறது.",
+    h2: "WhatsApp-ல். 30 நொடியில்.",
+    sub: "Voice note அனுப்புங்கள். 3 posts தயாராகும் — தமிழ், Hinglish, ஆங்கிலத்தில்.",
+    cta: "இலவசமாக தொடங்குங்கள்",
+  },
+  te: {
+    h1: "మీ వ్యాపారం, స్వయంగా మార్కెటింగ్.",
+    h2: "WhatsApp లో. 30 సెకన్లలో.",
+    sub: "Voice note పంపండి. 3 posts రెడీగా వస్తాయి — తెలుగు, Hinglish, English లో.",
+    cta: "ఉచితంగా ప్రారంభించండి",
+  },
+  mr: {
+    h1: "तुमचा व्यवसाय, स्वतःचीच मार्केटिंग.",
+    h2: "WhatsApp वर. 30 सेकंदात.",
+    sub: "Voice note पाठवा. 3 posts तयार मिळतात — मराठी, Hinglish, इंग्रजीत.",
+    cta: "मोफत सुरू करा",
+  },
+  bn: {
+    h1: "আপনার ব্যবসা, নিজেই মার্কেটিং।",
+    h2: "WhatsApp-এ। ৩০ সেকেন্ডে।",
+    sub: "Voice note পাঠান। ৩টি পোস্ট রেডি — বাংলা, Hinglish, ইংরেজিতে।",
+    cta: "বিনামূল্যে শুরু করুন",
+  },
+  gu: {
+    h1: "તમારો ધંધો, પોતાની જ માર્કેટિંગ.",
+    h2: "WhatsApp પર. 30 સેકન્ડમાં.",
+    sub: "Voice note મોકલો. 3 posts તૈયાર — ગુજરાતી, Hinglish, અંગ્રેજીમાં.",
+    cta: "મફતમાં શરૂ કરો",
+  },
+  kn: {
+    h1: "ನಿಮ್ಮ ವ್ಯವಸಾಯ, ಸ್ವತಃ ಮಾರ್ಕೆಟಿಂಗ್.",
+    h2: "WhatsApp ನಲ್ಲಿ. 30 ಸೆಕೆಂಡ್‌ನಲ್ಲಿ.",
+    sub: "Voice note ಕಳುಹಿಸಿ. 3 posts ರೆಡಿ — ಕನ್ನಡ, Hinglish, ಇಂಗ್ಲೀಷ್‌ನಲ್ಲಿ.",
+    cta: "ಉಚಿತವಾಗಿ ಪ್ರಾರಂಭಿಸಿ",
+  },
+  ml: {
+    h1: "നിങ്ങളുടെ ബിസിനസ്, സ്വയം മാർക്കറ്റിംഗ്.",
+    h2: "WhatsApp-ൽ. 30 സെക്കൻഡിൽ.",
+    sub: "Voice note അയക്കൂ. 3 posts റെഡി — മലയാളം, Hinglish, ഇംഗ്ലീഷിൽ.",
+    cta: "സൗജന്യമായി ആരംഭിക്കൂ",
+  },
+  pa: {
+    h1: "ਤੁਹਾਡਾ ਕਾਰੋਬਾਰ, ਆਪਣੀ ਮਾਰਕੀਟਿੰਗ.",
+    h2: "WhatsApp ਤੇ. 30 ਸਕਿੰਟਾਂ ਵਿੱਚ.",
+    sub: "Voice note ਭੇਜੋ. 3 posts ਤਿਆਰ — ਪੰਜਾਬੀ, Hinglish, ਅੰਗਰੇਜ਼ੀ ਵਿੱਚ.",
+    cta: "ਮੁਫ਼ਤ ਸ਼ੁਰੂ ਕਰੋ",
+  },
+};
+
+const REGION_LANG: Record<string, Lang> = {
+  MH: "mr", TN: "ta", KA: "kn", KL: "ml", WB: "bn", AS: "bn",
+  AP: "te", TS: "te", PB: "pa", GJ: "gu",
+  UP: "hi", MP: "hi", RJ: "hi", BR: "hi", HR: "hi", DL: "hi",
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PAGE
+// ─────────────────────────────────────────────────────────────────────────────
+
+export default function Page() {
+  const [lang, setLang] = useState<Lang>("en");
+  const [langOpen, setLangOpen] = useState(false);
+  const [signup, setSignup] = useState(false);
+  const [langBanner, setLangBanner] = useState<Lang | null>(null);
+  const langRef = useRef<HTMLDivElement>(null);
+
+  // ── Visitor tracking (fires once per session) ──────────────────────────────
   useEffect(() => {
-    const stored = localStorage.getItem("statuscraft_lang") as LangCode | null;
-    if (stored && TRANSLATIONS[stored]) {
-      setLang(stored);
-      return;
-    }
+    if (sessionStorage.getItem("sc_tracked")) return;
+    sessionStorage.setItem("sc_tracked", "1");
+    const params = new URLSearchParams(window.location.search);
+    fetch("/api/track/visit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        referrer:    document.referrer || null,
+        utmSource:   params.get("utm_source"),
+        utmMedium:   params.get("utm_medium"),
+        utmCampaign: params.get("utm_campaign"),
+      }),
+    }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const saved = localStorage.getItem("sc_lang") as Lang | null;
+    if (saved && LANGS[saved]) { setLang(saved); return; }
     fetch("https://ipapi.co/json/")
-      .then((r) => r.json())
-      .then((data) => {
-        const region: string = data?.region_code ?? "";
-        const detected: LangCode = REGION_TO_LANG[region] ?? "en";
-        setLang(detected);
-        localStorage.setItem("statuscraft_lang", detected);
-        // Show "switch to English" banner only if a non-English language was auto-detected
-        if (detected !== "en") {
-          setAutoDetectedLang(detected);
-          setShowLangBanner(true);
-        }
-      })
-      .catch(() => {/* stay on en */});
+      .then(r => r.json())
+      .then(d => {
+        const detected = REGION_LANG[d?.region_code] ?? null;
+        if (detected) { setLang(detected); localStorage.setItem("sc_lang", detected); setLangBanner(detected); }
+      }).catch(() => {});
   }, []);
 
-  // Close dropdown on outside click
   useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setLangDropdownOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
+    const fn = (e: MouseEvent) => {
+      if (langRef.current && !langRef.current.contains(e.target as Node)) setLangOpen(false);
+    };
+    document.addEventListener("mousedown", fn);
+    return () => document.removeEventListener("mousedown", fn);
   }, []);
 
-  function switchLang(l: LangCode) {
-    setLang(l);
-    localStorage.setItem("statuscraft_lang", l);
-    setLangDropdownOpen(false);
-  }
-
-  const t = TRANSLATIONS[lang];
-
-  const businesses = [
-    "Kirana Stores", "Restaurants", "Boutiques", "Sweet Shops",
-    "Salons", "Coaching Classes", "Bakeries", "Jewellers",
-    "Tailors", "Pharma Shops", "Tea Stalls", "Printing Shops",
-  ];
+  const t = HERO[lang];
 
   return (
-    <div className="min-h-screen bg-[#0d0d0f] text-white" style={{ scrollBehavior: "smooth" }}>
+    <div className="min-h-screen bg-[#070709] text-white antialiased">
+      <AnimatePresence>{signup && <QuickSignup onClose={() => setSignup(false)} />}</AnimatePresence>
 
-      {/* ── LANGUAGE DETECTED BANNER ── */}
-      <AnimatePresence>
-        {showLangBanner && autoDetectedLang && (
-          <motion.div
-            initial={{ y: 80, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: 80, opacity: 0 }}
-            transition={{ type: "spring", bounce: 0.3, duration: 0.5 }}
-            className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-2rem)] max-w-md"
-          >
-            <div className="bg-[#1e1e24] border border-[#3a3a45] rounded-2xl px-4 py-3.5 shadow-2xl flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-[#25D366]/15 flex items-center justify-center flex-shrink-0">
-                <Globe className="w-4 h-4 text-[#25D366]" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-white leading-tight">
-                  Showing in {LANG_NAMES[autoDetectedLang]}
-                </p>
-                <p className="text-xs text-[#8b8b9a] mt-0.5">
-                  Based on your location
-                </p>
-              </div>
-              <div className="flex items-center gap-2 flex-shrink-0">
-                <button
-                  onClick={() => {
-                    switchLang("en");
-                    setShowLangBanner(false);
-                  }}
-                  className="text-xs font-semibold text-[#25D366] hover:text-white bg-[#25D366]/10 hover:bg-[#25D366]/20 px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap"
-                >
-                  Switch to English
-                </button>
-                <button
-                  onClick={() => setShowLangBanner(false)}
-                  className="text-[#555562] hover:text-white transition-colors text-lg leading-none"
-                >
-                  ×
-                </button>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* ── NAV ─────────────────────────────────────────────────────────── */}
+      <nav className="sticky top-0 z-40 border-b border-white/[0.05] bg-[#070709]/90 backdrop-blur-xl">
+        <div className="max-w-5xl mx-auto px-5 h-16 flex items-center justify-between">
 
-      {/* ── NAVBAR ── */}
-      <nav className="sticky top-0 z-50 border-b border-[#2a2a35] bg-[#0d0d0f]/80 backdrop-blur-md">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 flex items-center justify-between h-16">
-          {/* Logo */}
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-[#25D366] flex items-center justify-center flex-shrink-0">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-[#25D366] flex items-center justify-center">
               <Zap className="w-4 h-4 text-black fill-black" />
             </div>
-            <span className="text-lg font-bold tracking-tight">StatusCraft</span>
+            <span className="font-bold text-[15px] tracking-tight">StatusCraft</span>
           </div>
 
-          {/* Right nav */}
-          <div className="flex items-center gap-2 sm:gap-3">
-            {/* Language switcher */}
-            <div className="relative" ref={dropdownRef}>
+          <div className="hidden md:flex items-center gap-7 text-sm text-[#6b6b7a]">
+            <a href="#works" className="hover:text-white transition-colors">How it works</a>
+            <a href="#features" className="hover:text-white transition-colors">Features</a>
+            <a href="#pricing" className="hover:text-white transition-colors">Pricing</a>
+          </div>
+
+          <div className="flex items-center gap-2.5">
+            {/* Lang switcher */}
+            <div className="relative" ref={langRef}>
               <button
-                onClick={() => setLangDropdownOpen((v) => !v)}
-                className="flex items-center gap-1.5 text-sm text-[#8b8b9a] hover:text-white border border-[#2a2a35] hover:border-[#3a3a45] px-2.5 py-1.5 rounded-lg transition-colors"
+                onClick={() => setLangOpen(v => !v)}
+                className="flex items-center gap-1.5 text-xs text-[#6b6b7a] hover:text-white border border-white/[0.07] px-2.5 py-1.5 rounded-lg transition-colors"
               >
                 <Globe className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">{LANG_NAMES[lang]}</span>
-                <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${langDropdownOpen ? "rotate-180" : ""}`} />
+                <span className="hidden sm:inline">{LANGS[lang]}</span>
+                <ChevronDown className={`w-3 h-3 transition-transform ${langOpen ? "rotate-180" : ""}`} />
               </button>
               <AnimatePresence>
-                {langDropdownOpen && (
+                {langOpen && (
                   <motion.div
-                    initial={{ opacity: 0, y: -6, scale: 0.97 }}
+                    initial={{ opacity: 0, y: -4, scale: 0.97 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: -6, scale: 0.97 }}
-                    transition={{ duration: 0.15 }}
-                    className="absolute right-0 mt-1 w-44 bg-[#16161a] border border-[#2a2a35] rounded-xl shadow-2xl overflow-hidden z-50"
+                    exit={{ opacity: 0, y: -4, scale: 0.97 }}
+                    transition={{ duration: 0.12 }}
+                    className="absolute right-0 top-full mt-1 w-40 bg-[#111113] border border-white/[0.07] rounded-xl overflow-hidden shadow-2xl z-50"
                   >
-                    {(Object.keys(LANG_NAMES) as LangCode[]).map((l) => (
+                    {(Object.keys(LANGS) as Lang[]).map(l => (
                       <button
                         key={l}
-                        onClick={() => switchLang(l)}
-                        className={`w-full text-left px-3.5 py-2.5 text-sm flex items-center justify-between hover:bg-[#1e1e24] transition-colors ${lang === l ? "text-[#25D366]" : "text-[#8b8b9a]"}`}
+                        onClick={() => { setLang(l); localStorage.setItem("sc_lang", l); setLangOpen(false); }}
+                        className={`w-full text-left px-3.5 py-2.5 text-sm flex items-center justify-between hover:bg-white/[0.04] transition-colors ${lang === l ? "text-[#25D366]" : "text-[#6b6b7a]"}`}
                       >
-                        {LANG_NAMES[l]}
-                        {lang === l && <Check className="w-3.5 h-3.5" />}
+                        {LANGS[l]}
+                        {lang === l && <Check className="w-3 h-3" />}
                       </button>
                     ))}
                   </motion.div>
@@ -438,640 +438,389 @@ export default function LandingPage() {
               </AnimatePresence>
             </div>
 
-            <Link
-              href="/login"
-              className="text-sm text-[#8b8b9a] hover:text-white transition-colors hidden sm:inline"
-            >
-              Login
+            <Link href="/login" className="hidden sm:block text-sm text-[#6b6b7a] hover:text-white transition-colors">
+              Log in
             </Link>
-            <Link
-              href="/login"
-              className="inline-flex items-center gap-1.5 bg-[#25D366] hover:bg-[#1aab52] text-black font-semibold text-sm px-4 py-2 rounded-xl transition-colors"
+            <button
+              onClick={() => setSignup(true)}
+              className="flex items-center gap-1.5 bg-[#25D366] hover:bg-[#1fbd5a] text-black font-semibold text-sm px-4 py-2 rounded-xl transition-all hover:shadow-[0_0_20px_rgba(37,211,102,0.35)]"
             >
-              <span className="hidden sm:inline">Start Free</span>
-              <span className="sm:hidden">Start</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </Link>
+              Start free <ArrowRight className="w-3.5 h-3.5" />
+            </button>
           </div>
         </div>
       </nav>
 
-      {/* ── HERO ── */}
-      <section className="relative max-w-6xl mx-auto px-4 sm:px-6 pt-16 pb-20 sm:pt-24 sm:pb-28 overflow-hidden">
-        {/* Radial glow */}
-        <div
-          className="pointer-events-none absolute -top-32 left-1/2 -translate-x-1/2 w-[700px] h-[500px] rounded-full opacity-20"
-          style={{
-            background: "radial-gradient(ellipse at center, #25D366 0%, transparent 70%)",
-            filter: "blur(60px)",
-          }}
-        />
+      {/* ── LANGUAGE BANNER ─────────────────────────────────────────────── */}
+      <AnimatePresence>
+        {langBanner && (
+          <motion.div
+            initial={{ y: 60, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 60, opacity: 0 }}
+            className="fixed bottom-5 left-1/2 -translate-x-1/2 z-40 w-[calc(100%-2rem)] max-w-sm"
+          >
+            <div className="bg-[#111113] border border-white/[0.08] rounded-2xl px-4 py-3 shadow-2xl flex items-center gap-3">
+              <Globe className="w-4 h-4 text-[#25D366] flex-shrink-0" />
+              <p className="flex-1 text-sm">Showing in <span className="font-semibold text-white">{LANGS[langBanner]}</span></p>
+              <button
+                onClick={() => { setLang("en"); localStorage.setItem("sc_lang", "en"); setLangBanner(null); }}
+                className="text-xs font-semibold text-[#25D366] bg-[#25D366]/10 px-3 py-1.5 rounded-lg"
+              >
+                Switch to English
+              </button>
+              <button onClick={() => setLangBanner(null)} className="text-[#555562] text-lg">×</button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-        <div className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center relative z-10">
-          {/* Left: copy */}
+      {/* ── HERO ────────────────────────────────────────────────────────── */}
+      <section className="max-w-5xl mx-auto px-5 pt-20 pb-24 overflow-hidden">
+        {/* background glow */}
+        <div className="pointer-events-none absolute left-1/2 top-0 -translate-x-1/2 w-[700px] h-[500px]"
+          style={{ background: "radial-gradient(ellipse at 50% 0%, rgba(37,211,102,0.12) 0%, transparent 65%)", filter: "blur(1px)" }} />
+
+        <div className="grid lg:grid-cols-2 gap-14 items-center relative">
+          {/* Left */}
           <div>
-            {/* Badge */}
+            {/* Product Hunt badge */}
             <motion.div
-              initial={{ opacity: 0, y: 12 }}
+              initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5 }}
-              className="inline-flex items-center gap-2 bg-[#16161a] border border-[#2a2a35] text-sm text-[#8b8b9a] px-3 py-1.5 rounded-full mb-6"
+              className="inline-flex items-center gap-2 border border-white/[0.07] bg-white/[0.03] text-xs text-[#6b6b7a] px-3 py-1.5 rounded-full mb-7"
             >
-              <span>🤖</span>
-              <span>Powered by Claude AI</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-[#25D366] animate-pulse" />
+              Built for India's 63 million small businesses
             </motion.div>
 
             <AnimatePresence mode="wait">
-              <motion.h1
-                key={lang + "-h1"}
-                initial={{ opacity: 0, y: 16 }}
+              <motion.div
+                key={lang}
+                initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.4 }}
-                className="text-4xl sm:text-5xl lg:text-[3.25rem] font-extrabold leading-tight tracking-tight mb-5"
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.3 }}
               >
-                <span
-                  style={{
-                    background: "linear-gradient(135deg, #ffffff 0%, #a0a0b0 100%)",
+                <h1 className="text-[2.75rem] sm:text-[3.25rem] font-extrabold leading-[1.08] tracking-tight mb-5">
+                  <span className="text-white">{t.h1}</span>
+                  <br />
+                  <span style={{
+                    background: "linear-gradient(95deg, #25D366 0%, #4ade80 100%)",
                     WebkitBackgroundClip: "text",
                     WebkitTextFillColor: "transparent",
                     backgroundClip: "text",
-                  }}
-                >
-                  {t.heroLine1}
-                </span>
-                <br />
-                <span
-                  style={{
-                    background: "linear-gradient(135deg, #25D366 0%, #128C52 100%)",
-                    WebkitBackgroundClip: "text",
-                    WebkitTextFillColor: "transparent",
-                    backgroundClip: "text",
-                  }}
-                >
-                  {t.heroLine2}
-                </span>
-              </motion.h1>
-            </AnimatePresence>
+                  }}>
+                    {t.h2}
+                  </span>
+                </h1>
 
-            <AnimatePresence mode="wait">
-              <motion.p
-                key={lang + "-sub"}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.3 }}
-                className="text-[#8b8b9a] text-lg leading-relaxed mb-8 max-w-md"
-              >
-                {t.heroSub}
-              </motion.p>
-            </AnimatePresence>
+                <p className="text-[#6b6b7a] text-lg leading-relaxed mb-9 max-w-[440px]">
+                  {t.sub}
+                </p>
 
-            {/* CTAs */}
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={lang + "-cta"}
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.3 }}
-                className="flex flex-wrap items-center gap-3 mb-6"
-              >
-                <Link
-                  href="/login"
-                  className="inline-flex items-center gap-2 bg-[#25D366] hover:bg-[#1aab52] text-black font-bold px-6 py-3.5 rounded-xl text-base transition-all hover:shadow-[0_0_24px_rgba(37,211,102,0.4)]"
-                >
-                  {t.ctaPrimary} <ArrowRight className="w-4 h-4" />
-                </Link>
-                <a
-                  href="#how-it-works"
-                  className="inline-flex items-center gap-2 border border-[#2a2a35] hover:border-[#3a3a45] text-white font-semibold px-6 py-3.5 rounded-xl text-base transition-colors"
-                >
-                  {t.ctaSecondary}
-                </a>
-              </motion.div>
-            </AnimatePresence>
-
-            {/* Trust badges */}
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={lang + "-badges"}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.3 }}
-                className="flex flex-wrap items-center gap-4 text-sm text-[#8b8b9a]"
-              >
-                <span className="flex items-center gap-1.5">
-                  <Check className="w-3.5 h-3.5 text-[#25D366]" /> {t.badge1}
-                </span>
-                <span className="text-[#2a2a35]">·</span>
-                <span className="flex items-center gap-1.5">
-                  <Check className="w-3.5 h-3.5 text-[#25D366]" /> {t.badge2}
-                </span>
-                <span className="text-[#2a2a35]">·</span>
-                <span className="flex items-center gap-1.5">
-                  <Check className="w-3.5 h-3.5 text-[#25D366]" /> {t.badge3}
-                </span>
-              </motion.div>
-            </AnimatePresence>
-          </div>
-
-          {/* Right: Floating WhatsApp mock */}
-          <div className="lg:flex justify-center hidden">
-            <motion.div
-              animate={{ y: [0, -12, 0] }}
-              transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-              className="w-72 bg-[#16161a] border border-[#2a2a35] rounded-2xl overflow-hidden shadow-2xl"
-              style={{ boxShadow: "0 20px 80px rgba(37,211,102,0.08), 0 8px 32px rgba(0,0,0,0.5)" }}
-            >
-              {/* Chat header */}
-              <div className="bg-[#1e1e24] px-4 py-3 flex items-center gap-3 border-b border-[#2a2a35]">
-                <div className="w-8 h-8 rounded-full bg-[#25D366] flex items-center justify-center text-black font-bold text-xs">
-                  SC
-                </div>
-                <div>
-                  <p className="text-sm font-semibold">StatusCraft Bot</p>
-                  <p className="text-xs text-[#25D366]">● online</p>
-                </div>
-              </div>
-
-              {/* Chat messages */}
-              <div className="p-4 space-y-3 min-h-[260px]">
-                <div className="flex justify-end">
-                  <div className="bg-[#25D366]/20 border border-[#25D366]/30 rounded-xl rounded-br-sm px-3 py-2 max-w-[80%]">
-                    <div className="flex items-center gap-2">
-                      <Mic className="w-4 h-4 text-[#25D366]" />
-                      <div className="flex items-end gap-0.5">
-                        {[3, 5, 4, 6, 3, 5, 4].map((h, i) => (
-                          <motion.div
-                            key={i}
-                            className="w-0.5 bg-[#25D366] rounded-full"
-                            animate={{ height: [`${h * 2}px`, `${h * 4}px`, `${h * 2}px`] }}
-                            transition={{ duration: 0.8, repeat: Infinity, delay: i * 0.1, ease: "easeInOut" }}
-                          />
-                        ))}
-                      </div>
-                      <span className="text-xs text-[#8b8b9a]">0:08</span>
-                    </div>
-                  </div>
+                <div className="flex flex-wrap gap-3 mb-8">
+                  <button
+                    onClick={() => setSignup(true)}
+                    className="flex items-center gap-2 bg-[#25D366] hover:bg-[#1fbd5a] text-black font-bold px-7 py-3.5 rounded-xl text-[15px] transition-all hover:shadow-[0_0_32px_rgba(37,211,102,0.4)]"
+                  >
+                    {t.cta} <ArrowRight className="w-4 h-4" />
+                  </button>
+                  <a
+                    href="#works"
+                    className="flex items-center gap-2 border border-white/[0.08] hover:border-white/[0.15] text-[#6b6b7a] hover:text-white font-semibold px-6 py-3.5 rounded-xl text-[15px] transition-colors"
+                  >
+                    <Play className="w-4 h-4" />
+                    See how it works
+                  </a>
                 </div>
 
-                <div className="flex justify-start">
-                  <div className="bg-[#1e1e24] border border-[#2a2a35] rounded-xl rounded-bl-sm px-3 py-2 max-w-[90%]">
-                    <p className="text-xs text-white">
-                      ✨ 3 posts created! Mango Pickle Launch — ready to approve
-                    </p>
-                    <p className="text-[10px] text-[#8b8b9a] mt-1">Reply APPROVE to go live</p>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  {[
-                    { label: "Hindi", color: "#ff6b35" },
-                    { label: "Hinglish", color: "#25D366" },
-                    { label: "English", color: "#7c3aed" },
-                  ].map((p, i) => (
-                    <motion.div
-                      key={p.label}
-                      initial={{ opacity: 0, x: -8 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: 0.3 + i * 0.15, duration: 0.4 }}
-                      className="bg-[#0d0d0f] border border-[#2a2a35] rounded-lg px-3 py-2 flex items-center justify-between"
-                    >
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: p.color }} />
-                        <span className="text-xs text-[#8b8b9a]">{p.label} variant</span>
-                      </div>
-                      <span className="text-[10px] bg-[#16161a] border border-[#2a2a35] px-1.5 py-0.5 rounded text-[#8b8b9a]">
-                        Preview
-                      </span>
-                    </motion.div>
+                <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-[#555562]">
+                  {["No credit card", "Free forever plan", "11 Indian languages"].map((b, i) => (
+                    <span key={i} className="flex items-center gap-1.5">
+                      <Check className="w-3.5 h-3.5 text-[#25D366]" /> {b}
+                    </span>
                   ))}
                 </div>
-              </div>
-            </motion.div>
+              </motion.div>
+            </AnimatePresence>
           </div>
+
+          {/* Right — phone */}
+          <motion.div
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.15 }}
+            className="flex justify-center lg:justify-end"
+          >
+            <PhoneDemo />
+          </motion.div>
         </div>
       </section>
 
-      {/* ── STATS ROW ── */}
-      <section className="border-y border-[#2a2a35] bg-[#16161a]">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-10">
-          <div className="grid grid-cols-3 gap-6 text-center">
-            {[
-              { value: 12000, suffix: "+", label: "Businesses" },
-              { value: 40, suffix: "+", label: "Festivals covered" },
-              { value: 30, suffix: "s", label: "To create a post" },
-            ].map((s) => (
-              <div key={s.label}>
-                <div className="text-3xl sm:text-4xl font-extrabold text-white mb-1">
-                  <AnimatedCounter value={s.value} suffix={s.suffix} />
-                </div>
-                <p className="text-xs sm:text-sm text-[#8b8b9a]">{s.label}</p>
-              </div>
-            ))}
-          </div>
+      {/* ── NUMBERS ─────────────────────────────────────────────────────── */}
+      <div className="border-y border-white/[0.04] bg-[#0b0b0d]">
+        <div className="max-w-5xl mx-auto px-5 py-10 grid grid-cols-2 sm:grid-cols-4 gap-6 text-center">
+          {[
+            { n: 12000, s: "+", label: "businesses" },
+            { n: 63, s: "M", label: "India SMB market" },
+            { n: 40, s: "+", label: "festivals covered" },
+            { n: 30, s: "s", label: "to create a post" },
+          ].map(({ n, s, label }) => (
+            <div key={label}>
+              <p className="text-3xl font-extrabold text-white"><Count to={n} suffix={s} /></p>
+              <p className="text-xs text-[#3d3d4a] mt-1">{label}</p>
+            </div>
+          ))}
         </div>
-      </section>
+      </div>
 
-      {/* ── SCROLLING MARQUEE ── */}
-      <section className="border-b border-[#2a2a35] bg-[#0d0d0f] overflow-hidden py-5">
-        <p className="text-center text-xs text-[#555562] uppercase tracking-widest mb-4">
-          Trusted by 12,000+ Indian businesses
-        </p>
-        <div className="relative flex overflow-hidden">
-          {[0, 1].map((copy) => (
+      {/* ── MARQUEE ─────────────────────────────────────────────────────── */}
+      <div className="overflow-hidden border-b border-white/[0.04] py-4">
+        <div className="flex">
+          {[0, 1].map(c => (
             <motion.div
-              key={copy}
-              className="flex gap-3 flex-shrink-0 pr-3"
+              key={c}
+              className="flex gap-2.5 pr-2.5 flex-shrink-0"
               animate={{ x: ["0%", "-100%"] }}
               transition={{ duration: 28, ease: "linear", repeat: Infinity }}
             >
-              {businesses.map((biz) => (
-                <span
-                  key={biz + copy}
-                  className="bg-[#16161a] border border-[#2a2a35] text-[#8b8b9a] text-xs sm:text-sm px-3 py-1.5 rounded-full whitespace-nowrap"
-                >
-                  {biz}
+              {["Kirana Store","Restaurant","Boutique","Sweet Shop","Salon","Coaching Class","Bakery","Jeweller","Tailor","Pharmacy","Tea Stall","Printer"].map(b => (
+                <span key={b+c} className="bg-white/[0.02] border border-white/[0.04] text-[#3d3d4a] text-xs px-3 py-1.5 rounded-full whitespace-nowrap">
+                  {b}
                 </span>
               ))}
             </motion.div>
           ))}
         </div>
-      </section>
+      </div>
 
-      {/* ── HOW IT WORKS ── */}
-      <section id="how-it-works" className="max-w-6xl mx-auto px-4 sm:px-6 py-20 sm:py-28">
+      {/* ── HOW IT WORKS ────────────────────────────────────────────────── */}
+      <section id="works" className="max-w-5xl mx-auto px-5 py-24">
         <div className="text-center mb-14">
+          <p className="text-xs font-bold tracking-widest text-[#25D366] uppercase mb-3">How it works</p>
           <h2 className="text-3xl sm:text-4xl font-extrabold mb-3">
-            From voice to viral in{" "}
-            <span className="text-[#25D366]">30 seconds</span>
+            Three steps. That's it.
           </h2>
-          <p className="text-[#8b8b9a] text-base max-w-md mx-auto">
-            The simplest marketing workflow ever built for Indian businesses.
+          <p className="text-[#6b6b7a] max-w-xs mx-auto">
+            No training, no setup, no design skills needed.
           </p>
         </div>
 
-        <div className="grid md:grid-cols-3 gap-6 lg:gap-8 relative">
-          {/* Connector line */}
-          <div className="hidden md:block absolute top-10 left-[calc(33%+1rem)] right-[calc(33%+1rem)] h-px bg-gradient-to-r from-[#2a2a35] via-[#25D366]/40 to-[#2a2a35]" />
+        <div className="grid md:grid-cols-3 gap-5 relative">
+          {/* connecting line */}
+          <div className="hidden md:block absolute top-11 left-[calc(33%+12px)] right-[calc(33%+12px)] h-px"
+            style={{ background: "linear-gradient(90deg, transparent, #25D366 50%, transparent)" }} />
 
-          <AnimatePresence mode="wait">
-            {[
-              { icon: "🎙️", step: "01", titleKey: "step1Title" as const, descKey: "step1Desc" as const, color: "#ff6b35" },
-              { icon: "✨", step: "02", titleKey: "step2Title" as const, descKey: "step2Desc" as const, color: "#25D366" },
-              { icon: "📲", step: "03", titleKey: "step3Title" as const, descKey: "step3Desc" as const, color: "#7c3aed" },
-            ].map((s, i) => (
-              <motion.div
-                key={lang + s.step}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.4, delay: i * 0.08 }}
-                className="relative bg-[#16161a] border border-[#2a2a35] rounded-2xl p-6 text-center hover:border-[#3a3a45] transition-colors group"
+          {[
+            { icon: "🎙️", n: "01", color: "#f97316", title: "Speak your offer", desc: "Send a 10-second voice note on WhatsApp — in Hindi, Tamil, Gujarati, or English. Just talk naturally." },
+            { icon: "✨", n: "02", color: "#25D366", title: "AI creates 3 posts", desc: "Claude AI writes the copy, generates the image, adds your logo and brand colours — all automatically." },
+            { icon: "📲", n: "03", color: "#a855f7", title: "Approve & go live", desc: "Reply APPROVE on WhatsApp. Your Status goes live instantly. Customers start seeing it within seconds." },
+          ].map((s, i) => (
+            <motion.div
+              key={s.n}
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: i * 0.1, duration: 0.4 }}
+              className="bg-[#0c0c0e] border border-white/[0.05] rounded-2xl p-7 text-center group hover:border-white/[0.1] transition-colors"
+            >
+              <div
+                className="w-14 h-14 rounded-2xl flex items-center justify-center text-2xl mx-auto mb-5 group-hover:scale-110 transition-transform"
+                style={{ background: `${s.color}14`, border: `1px solid ${s.color}22` }}
               >
-                <div
-                  className="w-14 h-14 rounded-2xl flex items-center justify-center text-2xl mx-auto mb-4 transition-transform group-hover:scale-110"
-                  style={{ background: `${s.color}18`, border: `1px solid ${s.color}30` }}
-                >
-                  {s.icon}
-                </div>
-                <span
-                  className="inline-block text-[10px] font-bold tracking-widest px-2 py-0.5 rounded-full mb-3"
-                  style={{ color: s.color, background: `${s.color}15`, border: `1px solid ${s.color}30` }}
-                >
-                  STEP {s.step}
-                </span>
-                <h3 className="text-lg font-bold mb-2">{t[s.titleKey]}</h3>
-                <p className="text-[#8b8b9a] text-sm leading-relaxed">{t[s.descKey]}</p>
-              </motion.div>
-            ))}
-          </AnimatePresence>
+                {s.icon}
+              </div>
+              <span
+                className="text-[9px] font-bold tracking-widest px-2 py-0.5 rounded-full inline-block mb-3"
+                style={{ color: s.color, background: `${s.color}12`, border: `1px solid ${s.color}20` }}
+              >
+                STEP {s.n}
+              </span>
+              <h3 className="text-base font-bold mb-2">{s.title}</h3>
+              <p className="text-sm text-[#555562] leading-relaxed">{s.desc}</p>
+            </motion.div>
+          ))}
         </div>
       </section>
 
-      {/* ── FEATURES GRID ── */}
-      <section id="features" className="bg-[#16161a] border-y border-[#2a2a35]">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-20 sm:py-28">
+      {/* ── FEATURES ────────────────────────────────────────────────────── */}
+      <section id="features" className="bg-[#0b0b0d] border-y border-white/[0.04]">
+        <div className="max-w-5xl mx-auto px-5 py-24">
           <div className="text-center mb-14">
+            <p className="text-xs font-bold tracking-widest text-[#25D366] uppercase mb-3">Features</p>
             <h2 className="text-3xl sm:text-4xl font-extrabold mb-3">
-              Everything you need to{" "}
-              <span className="text-[#25D366]">market on WhatsApp</span>
+              Everything you need to grow on WhatsApp
             </h2>
-            <p className="text-[#8b8b9a] text-base max-w-md mx-auto">
-              Built specifically for how Indian small businesses actually work.
+            <p className="text-[#6b6b7a] max-w-sm mx-auto">
+              Built for how Indian small businesses actually work — not how Silicon Valley thinks they work.
             </p>
           </div>
 
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {[
-              {
-                icon: <Mic className="w-5 h-5 text-white" />,
-                iconBg: "#25D366",
-                title: "Voice to Post",
-                desc: "Speak in any language. Get posts in 30 seconds. No typing, no designing.",
-              },
-              {
-                icon: <span className="text-xl">🎉</span>,
-                iconBg: "#f59e0b",
-                title: "Festival Engine",
-                desc: "Never miss Diwali, Eid, Pongal, or 40+ festivals. Posts auto-generate 3 days before.",
-              },
-              {
-                icon: <Bot className="w-5 h-5 text-white" />,
-                iconBg: "#7c3aed",
-                title: "WhatsApp Bot",
-                desc: "Your AI marketing manager lives in WhatsApp. Approve, edit, regenerate — all by chat.",
-              },
-              {
-                icon: <ShoppingCart className="w-5 h-5 text-white" />,
-                iconBg: "#ff6b35",
-                title: "Reply to Buy",
-                desc: "Customers reply to your status → bot collects order → Razorpay payment link sent automatically.",
-              },
-              {
-                icon: <Sparkles className="w-5 h-5 text-white" />,
-                iconBg: "#0ea5e9",
-                title: "Brand Watermark",
-                desc: "Your logo, your colours, your CTA baked into every image. statuscraft.in drives new signups.",
-              },
-              {
-                icon: <BarChart2 className="w-5 h-5 text-white" />,
-                iconBg: "#ec4899",
-                title: "Analytics",
-                desc: "Track views, replies, and conversion rate. Know which posts drive orders.",
-              },
-            ].map((f) => (
+              { bg: "#25D366", icon: <Mic className="w-4 h-4 text-black" />, title: "Voice to Post", desc: "Speak in any language. Get 3 posts in 30 seconds. Works 100% inside WhatsApp." },
+              { bg: "#f59e0b", icon: <span className="text-base">🎉</span>, title: "Festival Engine", desc: "Diwali, Eid, Pongal, IPL — 40+ events. Posts auto-create 3 days before so you never miss one." },
+              { bg: "#7c3aed", icon: <Bot className="w-4 h-4 text-white" />, title: "WhatsApp Bot", desc: "Your AI marketing manager lives inside WhatsApp. Approve, edit, and post — without opening any app." },
+              { bg: "#0ea5e9", icon: <Camera className="w-4 h-4 text-white" />, title: "AI Ad Studio", desc: "Photo your product. AI removes the background, creates a pro studio shot, and writes the caption." },
+              { bg: "#f43f5e", icon: <ShoppingCart className="w-4 h-4 text-white" />, title: "Reply to Buy", desc: "Customer replies to your Status → bot collects order → sends Razorpay payment link. Automatic." },
+              { bg: "#10b981", icon: <BarChart2 className="w-4 h-4 text-white" />, title: "Trend Posts", desc: "AI watches Bollywood, cricket, viral news — and creates posts linking your business to what's trending." },
+            ].map(f => (
               <motion.div
                 key={f.title}
-                whileHover={{ y: -4 }}
-                transition={{ duration: 0.2 }}
-                className="bg-[#0d0d0f] border border-[#2a2a35] rounded-2xl p-5 hover:border-[#3a3a45] transition-colors"
+                whileHover={{ y: -3 }}
+                transition={{ duration: 0.18 }}
+                className="bg-[#0c0c0e] border border-white/[0.05] rounded-2xl p-6 hover:border-white/[0.09] transition-colors"
               >
-                <div
-                  className="w-10 h-10 rounded-xl flex items-center justify-center mb-4"
-                  style={{ background: f.iconBg }}
-                >
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center mb-4" style={{ background: f.bg }}>
                   {f.icon}
                 </div>
-                <h3 className="font-bold text-base mb-2">{f.title}</h3>
-                <p className="text-[#8b8b9a] text-sm leading-relaxed">{f.desc}</p>
+                <h3 className="font-bold text-[15px] mb-1.5">{f.title}</h3>
+                <p className="text-sm text-[#555562] leading-relaxed">{f.desc}</p>
               </motion.div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* ── PRICING ── */}
-      <section id="pricing" className="max-w-6xl mx-auto px-4 sm:px-6 py-20 sm:py-28">
+      {/* ── TESTIMONIALS ────────────────────────────────────────────────── */}
+      <section className="max-w-5xl mx-auto px-5 py-24">
         <div className="text-center mb-14">
-          <h2 className="text-3xl sm:text-4xl font-extrabold mb-3">
-            Simple, honest{" "}
-            <span className="text-[#25D366]">pricing</span>
-          </h2>
-          <p className="text-[#8b8b9a] text-base max-w-md mx-auto">
-            Start free. Upgrade only when you&apos;re growing.
-          </p>
+          <p className="text-xs font-bold tracking-widest text-[#25D366] uppercase mb-3">Stories</p>
+          <h2 className="text-3xl sm:text-4xl font-extrabold">Real businesses. Real orders.</h2>
         </div>
-
-        <div className="grid sm:grid-cols-3 gap-5 lg:gap-6 items-start">
-          {/* Free */}
-          <div className="bg-[#16161a] border border-[#2a2a35] rounded-2xl p-6">
-            <p className="text-sm font-semibold text-[#8b8b9a] mb-1">Free</p>
-            <p className="text-3xl font-extrabold mb-1">₹0</p>
-            <p className="text-xs text-[#8b8b9a] mb-6">forever</p>
-            <ul className="space-y-3 mb-8 text-sm">
-              {["30 posts / month", "1 brand", "Voice to Post", "5 festival posts / month"].map((f) => (
-                <li key={f} className="flex items-start gap-2 text-[#8b8b9a]">
-                  <Check className="w-4 h-4 text-[#25D366] flex-shrink-0 mt-0.5" />
-                  {f}
-                </li>
-              ))}
-              {["WhatsApp Bot", "Reply to Buy"].map((f) => (
-                <li key={f} className="flex items-start gap-2 text-[#555562]">
-                  <span className="w-4 h-4 flex-shrink-0 text-center leading-none mt-0.5 text-lg">—</span>
-                  {f}
-                </li>
-              ))}
-            </ul>
-            <AnimatePresence mode="wait">
-              <motion.div key={lang + "-free"} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                <Link
-                  href="/login"
-                  className="block text-center border border-[#2a2a35] hover:border-[#3a3a45] text-white font-semibold py-2.5 rounded-xl text-sm transition-colors"
-                >
-                  {t.startFree}
-                </Link>
-              </motion.div>
-            </AnimatePresence>
-          </div>
-
-          {/* Pro */}
-          <div className="bg-[#16161a] border-2 border-[#25D366] rounded-2xl p-6 relative shadow-[0_0_40px_rgba(37,211,102,0.12)]">
-            <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-[#25D366] text-black text-[10px] font-bold px-3 py-0.5 rounded-full uppercase tracking-wider">
-              Most Popular
-            </span>
-            <p className="text-sm font-semibold text-[#25D366] mb-1">Pro</p>
-            <p className="text-3xl font-extrabold mb-1">₹999</p>
-            <p className="text-xs text-[#8b8b9a] mb-6">per month</p>
-            <ul className="space-y-3 mb-8 text-sm">
-              {["Unlimited posts", "1 brand", "Voice to Post", "Festival Engine (all)", "WhatsApp Bot", "Reply to Buy"].map((f) => (
-                <li key={f} className="flex items-start gap-2 text-[#8b8b9a]">
-                  <Check className="w-4 h-4 text-[#25D366] flex-shrink-0 mt-0.5" />
-                  {f}
-                </li>
-              ))}
-            </ul>
-            <AnimatePresence mode="wait">
-              <motion.div key={lang + "-pro"} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                <Link
-                  href="/login"
-                  className="block text-center bg-[#25D366] hover:bg-[#1aab52] text-black font-bold py-2.5 rounded-xl text-sm transition-all hover:shadow-[0_0_20px_rgba(37,211,102,0.4)]"
-                >
-                  {t.startPro}
-                </Link>
-              </motion.div>
-            </AnimatePresence>
-          </div>
-
-          {/* Agency */}
-          <div className="bg-[#16161a] border border-[#2a2a35] rounded-2xl p-6">
-            <p className="text-sm font-semibold text-[#8b8b9a] mb-1">Agency</p>
-            <p className="text-3xl font-extrabold mb-1">₹2,499</p>
-            <p className="text-xs text-[#8b8b9a] mb-6">per month</p>
-            <ul className="space-y-3 mb-8 text-sm">
-              {["Unlimited posts", "10 brands", "Voice to Post", "Festival Engine (all)", "WhatsApp Bot", "Reply to Buy"].map((f) => (
-                <li key={f} className="flex items-start gap-2 text-[#8b8b9a]">
-                  <Check className="w-4 h-4 text-[#25D366] flex-shrink-0 mt-0.5" />
-                  {f}
-                </li>
-              ))}
-            </ul>
-            <Link
-              href="/login"
-              className="block text-center border border-[#2a2a35] hover:border-[#3a3a45] text-white font-semibold py-2.5 rounded-xl text-sm transition-colors"
+        <div className="grid sm:grid-cols-3 gap-5">
+          {[
+            { name: "Priya Sharma", biz: "Priya's Kitchen, Mumbai", quote: "Main bas bolti hoon 'aaj special thali ₹120' — aur 30 second mein 3 posts ready. Mujhe typing bhi nahi karni. Customers samajhte hain mera poora marketing team hai! 😄" },
+            { name: "Ramesh Agarwal", biz: "Agarwal Sweets, Jaipur", quote: "Diwali posts automatically 3 din pehle ban gayi — logo, colours, sab kuch. I did nothing. 400+ orders that week from WhatsApp Status alone. Unbelievable." },
+            { name: "Fatima Malik", biz: "Style Studio, Hyderabad", quote: "A customer replied to my Status. The bot collected her details and sent a payment link. By the time I woke up, the bridal booking was confirmed. I didn't even know!" },
+          ].map(t => (
+            <motion.div
+              key={t.name}
+              whileHover={{ y: -4 }}
+              transition={{ duration: 0.18 }}
+              className="bg-[#0c0c0e] border border-white/[0.05] rounded-2xl p-6 hover:border-white/[0.09] transition-colors"
             >
-              Contact Us
-            </Link>
-          </div>
-        </div>
-      </section>
-
-      {/* ── TESTIMONIALS ── */}
-      <section className="bg-[#16161a] border-y border-[#2a2a35]">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-20 sm:py-28">
-          <div className="text-center mb-14">
-            <h2 className="text-3xl sm:text-4xl font-extrabold mb-3">
-              Real businesses,{" "}
-              <span className="text-[#25D366]">real results</span>
-            </h2>
-          </div>
-
-          <div className="grid sm:grid-cols-3 gap-5 lg:gap-6">
-            {[
-              {
-                name: "Priya Sharma",
-                biz: "Priya's Kitchen",
-                location: "Mumbai",
-                quote: "Main bas apni awaaz mein bol deti hoon 'aaj special thali 120 rupaye' — aur 30 second mein 3 posts ready. Mujhe typing bhi nahi karni! Mere customers ko lagta hai mera poora marketing team hai.",
-                stars: 5,
-              },
-              {
-                name: "Ramesh Agarwal",
-                biz: "Agarwal Sweets",
-                location: "Jaipur",
-                quote: "Diwali ke liye posts automatically 3 din pehle ban gayi — with our logo, our colours, everything. Maine kuch nahi kiya. 400+ orders came in just from WhatsApp Status that week. Incredible.",
-                stars: 5,
-              },
-              {
-                name: "Fatima Malik",
-                biz: "Style Studio",
-                location: "Hyderabad",
-                quote: "A customer replied to my status about a bridal package. The bot collected her details and sent a payment link. By the time I woke up, the booking was confirmed. I didn't even know about it!",
-                stars: 5,
-              },
-            ].map((testimonial) => (
-              <motion.div
-                key={testimonial.name}
-                whileHover={{ y: -4 }}
-                transition={{ duration: 0.2 }}
-                className="bg-[#0d0d0f] border border-[#2a2a35] rounded-2xl p-6 flex flex-col hover:border-[#3a3a45] transition-colors"
-              >
-                <div className="flex gap-0.5 mb-4">
-                  {Array.from({ length: testimonial.stars }).map((_, i) => (
-                    <Star key={i} className="w-4 h-4 text-[#f59e0b] fill-[#f59e0b]" />
-                  ))}
-                </div>
-                <p className="text-[#8b8b9a] text-sm leading-relaxed flex-1 mb-5">
-                  &ldquo;{testimonial.quote}&rdquo;
-                </p>
-                <div>
-                  <p className="font-semibold text-sm">{testimonial.name}</p>
-                  <p className="text-xs text-[#8b8b9a]">
-                    {testimonial.biz} · {testimonial.location}
-                  </p>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── FINAL CTA ── */}
-      <section className="bg-[#0a1f0f] border-y border-[#1a3a1f] relative overflow-hidden">
-        {/* glow */}
-        <div
-          className="pointer-events-none absolute inset-0 opacity-10"
-          style={{ background: "radial-gradient(ellipse at 50% 50%, #25D366 0%, transparent 65%)" }}
-        />
-        <div className="max-w-2xl mx-auto px-4 sm:px-6 py-20 sm:py-28 text-center relative z-10">
-          <h2 className="text-3xl sm:text-4xl font-extrabold mb-3">
-            Ready to grow on{" "}
-            <span className="text-[#25D366]">WhatsApp?</span>
-          </h2>
-          <p className="text-[#8b8b9a] text-base mb-8">
-            Join 12,000+ businesses already using StatusCraft
-          </p>
-          <Link
-            href="/login"
-            className="inline-flex items-center gap-2 bg-[#25D366] hover:bg-[#1aab52] text-black font-bold px-8 py-4 rounded-2xl text-lg transition-all hover:shadow-[0_0_40px_rgba(37,211,102,0.5)]"
-          >
-            Start free — no credit card needed <ArrowRight className="w-5 h-5" />
-          </Link>
-        </div>
-      </section>
-
-      {/* ── FOOTER ── */}
-      <footer className="border-t border-[#2a2a35]">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-12">
-          <div className="grid sm:grid-cols-4 gap-8 mb-10">
-            <div className="sm:col-span-1">
-              <div className="flex items-center gap-2 mb-3">
-                <div className="w-7 h-7 rounded-lg bg-[#25D366] flex items-center justify-center flex-shrink-0">
-                  <Zap className="w-3.5 h-3.5 text-black fill-black" />
-                </div>
-                <span className="font-bold">StatusCraft</span>
+              <div className="flex gap-0.5 mb-4">
+                {[0,1,2,3,4].map(i => <Star key={i} className="w-3.5 h-3.5 text-[#f59e0b] fill-[#f59e0b]" />)}
               </div>
-              <p className="text-xs text-[#8b8b9a] leading-relaxed">
-                AI marketing for Indian businesses
-              </p>
-            </div>
+              <p className="text-[#8b8b9a] text-sm leading-relaxed mb-5">"{t.quote}"</p>
+              <p className="font-semibold text-sm">{t.name}</p>
+              <p className="text-xs text-[#3d3d4a] mt-0.5">{t.biz}</p>
+            </motion.div>
+          ))}
+        </div>
+      </section>
 
-            <div>
-              <p className="text-xs font-semibold text-white uppercase tracking-wider mb-3">Product</p>
-              <ul className="space-y-2">
-                {[
-                  { label: "Features", href: "#features" },
-                  { label: "Pricing", href: "#pricing" },
-                  { label: "How it works", href: "#how-it-works" },
-                ].map((l) => (
-                  <li key={l.label}>
-                    <a href={l.href} className="text-sm text-[#8b8b9a] hover:text-white transition-colors">
-                      {l.label}
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            <div>
-              <p className="text-xs font-semibold text-white uppercase tracking-wider mb-3">Company</p>
-              <ul className="space-y-2">
-                {[
-                  { label: "About", href: "#" },
-                  { label: "Contact", href: "#" },
-                ].map((l) => (
-                  <li key={l.label}>
-                    <a href={l.href} className="text-sm text-[#8b8b9a] hover:text-white transition-colors">
-                      {l.label}
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            <div>
-              <p className="text-xs font-semibold text-white uppercase tracking-wider mb-3">Legal</p>
-              <ul className="space-y-2">
-                {[
-                  { label: "Privacy", href: "#" },
-                  { label: "Terms", href: "#" },
-                ].map((l) => (
-                  <li key={l.label}>
-                    <a href={l.href} className="text-sm text-[#8b8b9a] hover:text-white transition-colors">
-                      {l.label}
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </div>
+      {/* ── PRICING ─────────────────────────────────────────────────────── */}
+      <section id="pricing" className="bg-[#0b0b0d] border-y border-white/[0.04]">
+        <div className="max-w-5xl mx-auto px-5 py-24">
+          <div className="text-center mb-14">
+            <p className="text-xs font-bold tracking-widest text-[#25D366] uppercase mb-3">Pricing</p>
+            <h2 className="text-3xl sm:text-4xl font-extrabold mb-3">Start free. Grow at your own pace.</h2>
+            <p className="text-[#6b6b7a]">No hidden fees. Cancel any time.</p>
           </div>
 
-          <div className="border-t border-[#2a2a35] pt-6 text-center">
-            <p className="text-xs text-[#555562]">
-              © 2025 StatusCraft. Made with ❤️ in India
-            </p>
+          <div className="grid sm:grid-cols-3 gap-5 items-start">
+            {/* Starter */}
+            <div className="bg-[#0c0c0e] border border-white/[0.06] rounded-2xl p-6">
+              <p className="text-sm text-[#6b6b7a] font-medium mb-1">Starter</p>
+              <div className="flex items-end gap-1 mb-1"><span className="text-4xl font-extrabold">₹0</span></div>
+              <p className="text-xs text-[#3d3d4a] mb-7">Free forever</p>
+              <ul className="space-y-2.5 mb-8 text-sm">
+                {["30 posts / month", "1 brand", "Voice to Post", "5 festival posts / month"].map(f => (
+                  <li key={f} className="flex gap-2 text-[#6b6b7a]"><Check className="w-4 h-4 text-[#25D366] flex-shrink-0 mt-0.5" />{f}</li>
+                ))}
+                {["WhatsApp Bot", "Reply to Buy"].map(f => (
+                  <li key={f} className="flex gap-2 text-[#2a2a32]"><span className="w-4 flex-shrink-0 text-center">—</span>{f}</li>
+                ))}
+              </ul>
+              <button onClick={() => setSignup(true)} className="w-full py-2.5 text-sm font-semibold border border-white/[0.08] hover:border-white/[0.15] rounded-xl transition-colors">
+                Start free
+              </button>
+            </div>
+
+            {/* Pro */}
+            <div className="bg-[#0c0c0e] border-2 border-[#25D366] rounded-2xl p-6 relative shadow-[0_0_40px_rgba(37,211,102,0.08)]">
+              <span className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-[#25D366] text-black text-[9px] font-bold px-3 py-1 rounded-full uppercase tracking-wider">Most popular</span>
+              <p className="text-sm text-[#25D366] font-medium mb-1">Pro</p>
+              <div className="flex items-end gap-1 mb-1"><span className="text-4xl font-extrabold">₹999</span><span className="text-[#3d3d4a] text-sm mb-1.5">/mo</span></div>
+              <p className="text-xs text-[#3d3d4a] mb-7">Cancel any time</p>
+              <ul className="space-y-2.5 mb-8 text-sm">
+                {["Unlimited posts", "1 brand", "Voice to Post", "All 40+ festivals", "WhatsApp Bot", "Reply to Buy", "AI Ad Studio", "Trend Intelligence"].map(f => (
+                  <li key={f} className="flex gap-2 text-[#6b6b7a]"><Check className="w-4 h-4 text-[#25D366] flex-shrink-0 mt-0.5" />{f}</li>
+                ))}
+              </ul>
+              <button onClick={() => setSignup(true)} className="w-full py-2.5 text-sm font-bold bg-[#25D366] hover:bg-[#1fbd5a] text-black rounded-xl transition-all hover:shadow-[0_0_20px_rgba(37,211,102,0.4)]">
+                Start Pro trial
+              </button>
+            </div>
+
+            {/* Agency */}
+            <div className="bg-[#0c0c0e] border border-white/[0.06] rounded-2xl p-6">
+              <p className="text-sm text-[#6b6b7a] font-medium mb-1">Agency</p>
+              <div className="flex items-end gap-1 mb-1"><span className="text-4xl font-extrabold">₹2,499</span><span className="text-[#3d3d4a] text-sm mb-1.5">/mo</span></div>
+              <p className="text-xs text-[#3d3d4a] mb-7">For agencies & franchises</p>
+              <ul className="space-y-2.5 mb-8 text-sm">
+                {["Unlimited posts", "10 brands", "Everything in Pro", "Priority support", "Custom branding"].map(f => (
+                  <li key={f} className="flex gap-2 text-[#6b6b7a]"><Check className="w-4 h-4 text-[#25D366] flex-shrink-0 mt-0.5" />{f}</li>
+                ))}
+              </ul>
+              <Link href="/login" className="block w-full py-2.5 text-sm font-semibold border border-white/[0.08] hover:border-white/[0.15] rounded-xl transition-colors text-center">
+                Contact us
+              </Link>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── FINAL CTA ───────────────────────────────────────────────────── */}
+      <section className="max-w-5xl mx-auto px-5 py-28 text-center relative">
+        <div className="absolute inset-0 pointer-events-none"
+          style={{ background: "radial-gradient(ellipse at 50% 50%, rgba(37,211,102,0.07) 0%, transparent 60%)" }} />
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          className="relative"
+        >
+          <p className="text-xs font-bold tracking-widest text-[#25D366] uppercase mb-4">Get started today</p>
+          <h2 className="text-4xl sm:text-5xl font-extrabold mb-4 leading-tight">
+            Your first 3 posts,{" "}
+            <span style={{ background: "linear-gradient(95deg, #25D366, #4ade80)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>
+              in 90 seconds.
+            </span>
+          </h2>
+          <p className="text-[#6b6b7a] text-lg mb-10 max-w-md mx-auto">
+            Sign up with your phone. See your posts. No designer, no agency, no waiting.
+          </p>
+          <button
+            onClick={() => setSignup(true)}
+            className="inline-flex items-center gap-2.5 bg-[#25D366] hover:bg-[#1fbd5a] text-black font-bold px-10 py-4 rounded-2xl text-lg transition-all hover:shadow-[0_0_48px_rgba(37,211,102,0.45)]"
+          >
+            Start free — no credit card <ArrowRight className="w-5 h-5" />
+          </button>
+          <p className="text-[#3d3d4a] text-sm mt-4">
+            12,000+ Indian businesses already using StatusCraft
+          </p>
+        </motion.div>
+      </section>
+
+      {/* ── FOOTER ──────────────────────────────────────────────────────── */}
+      <footer className="border-t border-white/[0.04]">
+        <div className="max-w-5xl mx-auto px-5 py-12 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded-lg bg-[#25D366] flex items-center justify-center">
+              <Zap className="w-3 h-3 text-black fill-black" />
+            </div>
+            <span className="text-sm font-bold">StatusCraft</span>
+            <span className="text-[#2a2a32] text-xs ml-2">© 2025</span>
+          </div>
+          <div className="flex items-center gap-6 text-xs text-[#3d3d4a]">
+            <a href="#" className="hover:text-white transition-colors">Privacy</a>
+            <a href="#" className="hover:text-white transition-colors">Terms</a>
+            <a href="#" className="hover:text-white transition-colors">Contact</a>
+            <span>Made with ❤️ in India</span>
           </div>
         </div>
       </footer>
