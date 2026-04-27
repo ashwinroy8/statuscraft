@@ -1,11 +1,14 @@
 /**
  * Ad Studio Pipeline
- * Upload product photo → Claude analyses it → FLUX img2img enhances it →
- * Claude writes tagline + body based on current trends → saved as draft post
+ * Upload product photo → remove background → generate pro studio background →
+ * composite product onto new background → Claude writes copy → saved as draft post
+ *
+ * The product itself is NEVER changed. Only the background is replaced.
  */
 
 import Replicate from "replicate";
 import Anthropic from "@anthropic-ai/sdk";
+import sharp from "sharp";
 import { prisma } from "@/lib/prisma";
 import { uploadFileToStorage } from "./storage";
 import { transcribeAudio } from "@/lib/voice/transcription";
@@ -62,7 +65,7 @@ Return JSON:
   "dominantColors": ["color1", "color2"],
   "style": "premium | casual | traditional | modern | rustic",
   "category": "food | fashion | electronics | beauty | home | other",
-  "fluxPrompt": "detailed professional product photography prompt for FLUX AI — describe the ideal professional ad version of this product with studio lighting, clean composition, commercial quality. 2-3 sentences. Do NOT mention text or logos."
+  "backgroundPrompt": "describe ONLY the ideal background/setting for this product — e.g. 'warm wooden table with soft bokeh' or 'clean white gradient studio backdrop with subtle shadow'. Do NOT describe the product itself. 1-2 sentences."
 }`,
           },
         ],
@@ -76,9 +79,9 @@ Return JSON:
   const analysis = jsonMatch ? JSON.parse(jsonMatch[0]) : {};
 
   const productName: string = analysis.productName ?? "Product";
-  const fluxPrompt: string =
-    analysis.fluxPrompt ??
-    `Professional product photography of ${productName}, studio lighting, white or gradient background, commercial quality, sharp focus, high end advertisement style`;
+  const backgroundPrompt: string =
+    analysis.backgroundPrompt ??
+    "clean white studio backdrop, soft shadow beneath product, professional photography lighting";
 
   // ── Step 3: Fetch trending signals for content context ───────────────────────
   const signals = await prisma.signal.findMany({
@@ -96,8 +99,8 @@ Return JSON:
       ? signals.map((s) => `${s.type}: ${s.title}`).join("; ")
       : "general Indian market trends";
 
-  // ── Step 4: FLUX img2img — enhance to professional ad ───────────────────────
-  const enhancedImageUrl = await enhanceWithFlux(originalImageUrl, fluxPrompt);
+  // ── Step 4: Remove bg → generate pro background → composite ────────────────
+  const enhancedImageUrl = await enhanceProductPhoto(originalImageUrl, backgroundPrompt);
 
   // ── Step 5: Claude generates ad copy ────────────────────────────────────────
   const copyResponse = await anthropic.messages.create({
@@ -160,57 +163,105 @@ Return JSON:
   };
 }
 
-async function enhanceWithFlux(imageUrl: string, prompt: string): Promise<string> {
-  const fullPrompt = `${prompt}, professional advertisement photography, ultra high quality, commercial grade, vibrant colors, sharp focus, 9:16 vertical format`;
+/**
+ * Three-step enhancement — product is NEVER changed:
+ * 1. rembg → removes background, keeps product with transparency
+ * 2. FLUX Schnell → generates a matching professional studio background
+ * 3. Sharp → composites product on top of new background, applies sharpening
+ */
+async function enhanceProductPhoto(imageUrl: string, backgroundPrompt: string): Promise<string> {
+  // ── Step 1: Remove background ───────────────────────────────────────────────
+  console.log("[AdStudio] Removing background...");
+  const rembgOutput = await replicateRun("cjwbw/rembg:fb8af171cfa1616ddcf1242c093f9c46bcada5ad23a5bb7", {
+    image: imageUrl,
+    model: "u2net",
+  });
+  const rembgUrl = extractUrl(rembgOutput);
 
+  // Download the product PNG (transparent background)
+  const productRes = await fetch(rembgUrl);
+  const productBuffer = Buffer.from(await productRes.arrayBuffer());
+
+  // Get product dimensions
+  const productMeta = await sharp(productBuffer).metadata();
+  const prodW = productMeta.width ?? 1080;
+  const prodH = productMeta.height ?? 1080;
+
+  // Canvas = 9:16 sized to fit the product nicely
+  const canvasH = Math.max(prodH, Math.round(prodW * (16 / 9)));
+  const canvasW = Math.round(canvasH * (9 / 16));
+
+  // ── Step 2: Generate professional background with FLUX ──────────────────────
+  console.log("[AdStudio] Generating background...");
+  const bgPrompt = `${backgroundPrompt}, clean professional photography studio background, soft even lighting, no objects, no people, subtle gradient, high quality, ${canvasW}x${canvasH}`;
+
+  const bgOutput = await replicateRun("black-forest-labs/flux-schnell", {
+    prompt: bgPrompt,
+    width: canvasW,
+    height: canvasH,
+    num_inference_steps: 4,
+    output_format: "jpg",
+    output_quality: 95,
+  });
+  const bgUrl = extractUrl(bgOutput);
+
+  const bgRes = await fetch(bgUrl);
+  const bgBuffer = Buffer.from(await bgRes.arrayBuffer());
+
+  // ── Step 3: Composite product onto background + sharpen ─────────────────────
+  console.log("[AdStudio] Compositing...");
+
+  // Scale product to fill ~80% of canvas height, centered
+  const targetH = Math.round(canvasH * 0.80);
+  const scale = targetH / prodH;
+  const targetW = Math.round(prodW * scale);
+
+  const resizedProduct = await sharp(productBuffer)
+    .resize(targetW, targetH, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } })
+    .sharpen({ sigma: 1.2, m1: 0.5, m2: 0.5 }) // sharpen the product edges
+    .toBuffer();
+
+  const left = Math.round((canvasW - targetW) / 2);
+  const top = Math.round((canvasH - targetH) / 2);
+
+  const composited = await sharp(bgBuffer)
+    .resize(canvasW, canvasH, { fit: "cover" })
+    .composite([{ input: resizedProduct, top, left, blend: "over" }])
+    .jpeg({ quality: 92 })
+    .toBuffer();
+
+  // Save to Supabase
+  const path = `ad-studio/enhanced/${Date.now()}.jpg`;
+  return uploadFileToStorage(composited, path, "image/jpeg");
+}
+
+// ── Replicate helper with 429 retry ──────────────────────────────────────────
+async function replicateRun(model: string, input: Record<string, unknown>): Promise<unknown> {
   let lastError: Error | null = null;
   for (let attempt = 0; attempt < 3; attempt++) {
-    if (attempt > 0) {
-      await new Promise((r) => setTimeout(r, attempt * 12_000));
-    }
+    if (attempt > 0) await new Promise((r) => setTimeout(r, attempt * 12_000));
     try {
-      const output = await replicate.run("black-forest-labs/flux-dev", {
-        input: {
-          prompt: fullPrompt,
-          image: imageUrl,
-          prompt_strength: 0.65,
-          num_inference_steps: 28,
-          guidance: 3.5,
-          aspect_ratio: "9:16",
-          output_format: "jpg",
-          output_quality: 90,
-        },
-      });
-
-      let url: string;
-      if (typeof output === "string") url = output;
-      else if (Array.isArray(output) && output[0]) {
-        const item = output[0];
-        if (typeof item === "string") url = item;
-        else if (typeof (item as any).url === "function") url = await (item as any).url();
-        else url = String(item);
-      } else if (output && typeof (output as any).url === "function") {
-        url = await (output as any).url();
-      } else {
-        url = String(output);
-      }
-
-      // Store in Supabase permanently
-      const { uploadFileToStorage: upload } = await import("./storage");
-      const res = await fetch(url);
-      const buf = Buffer.from(await res.arrayBuffer());
-      const path = `ad-studio/enhanced/${Date.now()}.jpg`;
-      return await upload(buf, path, "image/jpeg");
+      return await replicate.run(model as `${string}/${string}`, { input });
     } catch (err: any) {
       lastError = err;
-      const is429 =
-        err?.response?.status === 429 ||
-        err?.message?.includes("429") ||
-        err?.message?.includes("Too Many Requests");
+      const is429 = err?.response?.status === 429 || err?.message?.includes("429") || err?.message?.includes("Too Many Requests");
       if (!is429) throw err;
     }
   }
-  throw lastError ?? new Error("Enhancement failed");
+  throw lastError ?? new Error("Replicate failed after retries");
+}
+
+function extractUrl(output: unknown): string {
+  if (typeof output === "string") return output;
+  if (Array.isArray(output) && output[0]) {
+    const item = output[0];
+    if (typeof item === "string") return item;
+    if (typeof (item as any).url === "function") return (item as any).url();
+    return String(item);
+  }
+  if (output && typeof (output as any).url === "function") return (output as any).url();
+  if (output && typeof (output as any).url === "string") return (output as any).url;
+  return String(output);
 }
 
 // ── Run Ad Studio from an already-stored image URL (no buffer needed) ─────────
@@ -270,7 +321,7 @@ Current trends: ${signalContext}
 Generate an ad for this product. Return JSON:
 {
   "productName": "short product name from image + voice",
-  "fluxPrompt": "professional product ad photography prompt for FLUX — 2-3 sentences describing ideal professional version, studio lighting, commercial quality, no text",
+  "backgroundPrompt": "describe ONLY the ideal background/setting — e.g. 'warm wooden table soft bokeh' or 'clean white studio gradient subtle shadow'. Do NOT describe the product itself.",
   "headline": "punchy headline under 8 words",
   "bodyText": "2-3 engaging sentences using the voice note details and trends. Use 1-2 emojis.",
   "ctaText": "short CTA under 6 words",
@@ -286,14 +337,14 @@ Generate an ad for this product. Return JSON:
   const analysis = jsonMatch ? JSON.parse(jsonMatch[0]) : {};
 
   const productName: string = analysis.productName ?? "Product";
-  const fluxPrompt: string = analysis.fluxPrompt ?? `Professional product photography of ${productName}, studio lighting, commercial quality`;
+  const backgroundPrompt: string = analysis.backgroundPrompt ?? "clean white studio backdrop, soft shadow, professional lighting";
   const headline: string = analysis.headline ?? `${productName} — Get Yours Now!`;
   const bodyText: string = analysis.bodyText ?? voiceText.slice(0, 200);
   const ctaText: string = analysis.ctaText ?? "Order Now";
   const hashtags: string[] = analysis.hashtags ?? [];
 
-  // Step 3: Enhance image with FLUX
-  const enhancedImageUrl = await enhanceWithFlux(imageUrl, fluxPrompt);
+  // Step 3: Remove bg → pro background → composite (product unchanged)
+  const enhancedImageUrl = await enhanceProductPhoto(imageUrl, backgroundPrompt);
 
   // Step 4: Save original to storage
   const originalPath = `ad-studio/${brandId}/${Date.now()}-original.jpg`;
