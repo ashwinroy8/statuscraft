@@ -60,24 +60,32 @@ export async function POST(req: NextRequest) {
         email_confirm: true,
       });
 
+      let supabaseUserId: string;
       if (authError || !authData?.user) {
-        // If email already taken (shouldn't happen but just in case), find the user
+        // Email/phone already exists in Supabase — find the existing auth user
         const { data: listData } = await adminClient.auth.admin.listUsers();
         const found = listData?.users?.find((u) => u.phone === `+${phone}` || u.email === userEmail);
         if (!found) {
           console.error("[signup/complete] createUser error:", authError);
           return NextResponse.json({ error: "Failed to create account." }, { status: 500 });
         }
+        supabaseUserId = found.id;
         userEmail = found.email ?? userEmail;
+      } else {
+        supabaseUserId = authData.user.id;
       }
 
-      existingUser = await prisma.user.create({
-        data: {
+      // Upsert Prisma user — id must match Supabase auth UUID
+      existingUser = await prisma.user.upsert({
+        where: { phone },
+        create: {
+          id: supabaseUserId,
           email: userEmail,
           name: businessName,
           phone,
           plan: "FREE",
         },
+        update: { name: businessName, email: userEmail },
       });
     }
 
@@ -89,10 +97,17 @@ export async function POST(req: NextRequest) {
           userId: existingUser.id,
           name: businessName,
           category,
-          onboardingCompleted: false,
+          onboardingCompleted: true,   // name + category collected → ready to generate
         },
       });
     }
+
+    // Also create Settings record so WhatsApp + auto features work
+    await prisma.settings.upsert({
+      where: { userId: existingUser.id },
+      create: { userId: existingUser.id, whatsappConnected: false },
+      update: {},
+    }).catch(() => {});
 
     // ── 4. Generate 3 sample post ideas with Claude (text only, fast) ─────────
     const posts = await generateSamplePosts(businessName, category);
