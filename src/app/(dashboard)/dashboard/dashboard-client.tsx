@@ -60,7 +60,7 @@ export default function DashboardClient({ brand, postsByDay: initialPostsByDay, 
   async function generateContent() {
     setGenerating(true);
     try {
-      await fetch("/api/cron/generate-content", {
+      const res = await fetch("/api/cron/generate-content", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -68,9 +68,15 @@ export default function DashboardClient({ brand, postsByDay: initialPostsByDay, 
         },
         body: JSON.stringify({ brandId: brand.id }),
       });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        alert(`Generation failed: ${data?.error ?? res.status}`);
+        setGenerating(false);
+        return;
+      }
       window.location.reload();
-    } catch (e) {
-      console.error(e);
+    } catch (e: any) {
+      alert(`Network error: ${e?.message ?? e}`);
     }
     setGenerating(false);
   }

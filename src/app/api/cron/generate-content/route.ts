@@ -137,7 +137,12 @@ export async function POST(req: NextRequest) {
   const { brandId, push = false } = await req.json();
 
   if (brandId) {
-    await generateDailyContent(brandId);
+    try {
+      await generateDailyContent(brandId);
+    } catch (err: any) {
+      console.error("[generate-content POST] generateDailyContent failed:", err);
+      return NextResponse.json({ error: err?.message ?? String(err) }, { status: 500 });
+    }
     if (push) {
       await pushPostsToWhatsApp(brandId).catch(e =>
         console.error(`[push-posts] brand ${brandId}:`, e?.message)
