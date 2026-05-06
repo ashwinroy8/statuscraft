@@ -1,7 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { generateDailyContent } from "@/lib/ai/content-generator";
-import { sendText, sendImageWithButtons, sendButtons } from "@/lib/whatsapp/client";
 
 // ── Auth helper ───────────────────────────────────────────────────────────────
 function isAuthorised(req: NextRequest): boolean {
@@ -53,10 +52,10 @@ async function pushPostsToWhatsApp(brandId: string): Promise<void> {
 
   if (!posts.length) return;
 
+  // Lazy-load WhatsApp client to avoid circular import issues at module load time
+  const { sendText, sendImageWithButtons, sendButtons } = await import("@/lib/whatsapp/client");
+
   // Opening message
-  const now = new Date().toLocaleTimeString("en-IN", {
-    hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata",
-  });
   await sendText(
     ownerPhone,
     `🌅 Good morning! Here are today's ${posts.length} posts for *${brand.name}* — approve the ones you like 👇`
