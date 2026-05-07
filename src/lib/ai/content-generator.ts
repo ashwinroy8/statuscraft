@@ -96,6 +96,14 @@ export async function generateDailyContent(brandId: string): Promise<void> {
     const scheduledAt = new Date(now);
     scheduledAt.setHours(hours, minutes, 0, 0);
 
+    // Verify signalId actually exists in DB before linking — Claude may hallucinate IDs
+    // or signals may have failed to save (transient DB errors)
+    let validSignalId: string | null = null;
+    if (postData.signalId) {
+      const signalExists = await prisma.signal.findUnique({ where: { id: postData.signalId }, select: { id: true } });
+      validSignalId = signalExists ? postData.signalId : null;
+    }
+
     // Create post record
     const post = await prisma.post.create({
       data: {
@@ -105,7 +113,7 @@ export async function generateDailyContent(brandId: string): Promise<void> {
         headline: postData.headline,
         bodyText: postData.bodyText,
         ctaText: postData.ctaText,
-        signalId: postData.signalId ?? null,
+        signalId: validSignalId,
         signalSource: postData.signalSource ?? undefined,
         aiReasoning: postData.aiReasoning,
         scheduledAt,
