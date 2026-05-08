@@ -100,7 +100,7 @@ Return JSON:
       : "general Indian market trends";
 
   // ── Step 4: Remove bg → generate pro background → composite ────────────────
-  const enhancedImageUrl = await enhanceProductPhoto(originalImageUrl, backgroundPrompt);
+  const enhancedImageUrl = await enhanceProductPhoto(originalImageUrl, backgroundPrompt, headline, ctaText, brand.name);
 
   // ── Step 5: Claude generates ad copy ────────────────────────────────────────
   const copyResponse = await anthropic.messages.create({
@@ -163,40 +163,44 @@ Return JSON:
   };
 }
 
-// Fixed canvas: 1080×1920 (9:16 WhatsApp Status) — FLUX Schnell requires multiples of 16
+// Fixed canvas: 1080×1920 (9:16 WhatsApp Status)
 const CANVAS_W = 1080;
 const CANVAS_H = 1920;
 
 /**
- * Three-step enhancement — product is NEVER changed:
- * 1. rembg → removes background, keeps product with transparency
- * 2. FLUX Schnell → generates a matching professional studio background (1080×1920)
- * 3. Sharp → composites product centered on background, applies edge sharpening
- *
- * Falls back to FLUX-only (no compositing) if rembg fails.
+ * Enhanced pipeline:
+ * 1. isnet-general-use rembg — much cleaner edges than u2net
+ * 2. FLUX Schnell × 8 steps — better quality background
+ * 3. Sharp — product centered in top 65%, drop shadow, dark gradient footer
+ * 4. SVG text overlay — headline + CTA burned into the image
  */
-async function enhanceProductPhoto(imageUrl: string, backgroundPrompt: string): Promise<string> {
-  // ── Step 2 (run in parallel with step 1): Generate background ────────────────
+async function enhanceProductPhoto(
+  imageUrl: string,
+  backgroundPrompt: string,
+  headline?: string,
+  ctaText?: string,
+  brandName?: string,
+): Promise<string> {
   console.log("[AdStudio] Generating background + removing bg in parallel...");
-  const bgPrompt = `${backgroundPrompt}, clean professional photography studio background, soft even lighting, no objects no people, subtle gradient, high quality`;
+
+  const bgPrompt = `${backgroundPrompt}, professional commercial photography background, dramatic studio lighting, rich depth of field bokeh, luxury product shot feel, vibrant, photorealistic, 8k`;
 
   const [bgResult, rembgResult] = await Promise.allSettled([
     replicateRun("black-forest-labs/flux-schnell", {
       prompt: bgPrompt,
       width: CANVAS_W,
       height: CANVAS_H,
-      num_inference_steps: 4,
-      output_format: "jpg",
+      num_inference_steps: 8,       // was 4 — noticeable quality jump
+      output_format: "webp",
       output_quality: 95,
     }),
     replicateRun("cjwbw/rembg", {
       image: imageUrl,
-      model: "u2net",
+      model: "isnet-general-use",   // was u2net — much sharper edges
     }),
   ]);
 
   if (bgResult.status === "rejected") {
-    console.error("[AdStudio] Background generation failed:", bgResult.reason);
     throw new Error("Background generation failed: " + bgResult.reason?.message);
   }
 
@@ -204,55 +208,95 @@ async function enhanceProductPhoto(imageUrl: string, backgroundPrompt: string): 
   const bgRes = await fetch(bgUrl);
   const bgBuffer = Buffer.from(await bgRes.arrayBuffer());
 
-  // ── Step 3: Composite if rembg succeeded, otherwise use original ─────────────
-  if (rembgResult.status === "rejected") {
-    console.warn("[AdStudio] rembg failed, using original product on new background:", rembgResult.reason?.message);
-    // Fallback: resize original onto background (no transparency, but still better bg)
-    const origRes = await fetch(imageUrl);
-    const origBuffer = Buffer.from(await origRes.arrayBuffer());
-
-    const composited = await sharp(bgBuffer)
-      .resize(CANVAS_W, CANVAS_H, { fit: "cover" })
-      .composite([{
-        input: await sharp(origBuffer)
-          .resize(Math.round(CANVAS_W * 0.80), Math.round(CANVAS_H * 0.70), { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } })
-          .toBuffer(),
-        top: Math.round(CANVAS_H * 0.12),
-        left: Math.round(CANVAS_W * 0.10),
-        blend: "over",
-      }])
-      .jpeg({ quality: 92 })
-      .toBuffer();
-
-    const path = `ad-studio/enhanced/${Date.now()}.jpg`;
-    return uploadFileToStorage(composited, path, "image/jpeg");
+  // ── Composite product ─────────────────────────────────────────────────────────
+  let productBuffer: Buffer;
+  if (rembgResult.status === "fulfilled") {
+    const rembgUrl = extractUrl(rembgResult.value);
+    const r = await fetch(rembgUrl);
+    productBuffer = Buffer.from(await r.arrayBuffer());
+    console.log("[AdStudio] rembg succeeded");
+  } else {
+    console.warn("[AdStudio] rembg failed, using original:", rembgResult.reason?.message);
+    const r = await fetch(imageUrl);
+    productBuffer = Buffer.from(await r.arrayBuffer());
   }
 
-  console.log("[AdStudio] Compositing product onto background...");
-  const rembgUrl = extractUrl(rembgResult.value);
-  const productRes = await fetch(rembgUrl);
-  const productBuffer = Buffer.from(await productRes.arrayBuffer());
-
-  // Scale product to 78% of canvas height, centered
-  const targetH = Math.round(CANVAS_H * 0.78);
-  const targetW = Math.round(CANVAS_W * 0.82);
+  // Product occupies top 62% of canvas, centered horizontally
+  const productAreaH = Math.round(CANVAS_H * 0.62);
+  const productAreaW = Math.round(CANVAS_W * 0.88);
 
   const resizedProduct = await sharp(productBuffer)
-    .resize(targetW, targetH, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } })
-    .sharpen({ sigma: 1.0, m1: 0.5, m2: 0.5 })
+    .resize(productAreaW, productAreaH, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } })
+    .sharpen({ sigma: 0.8 })
     .toBuffer();
 
-  const left = Math.round((CANVAS_W - targetW) / 2);
-  const top = Math.round((CANVAS_H - targetH) / 2);
+  const productLeft = Math.round((CANVAS_W - productAreaW) / 2);
+  const productTop  = Math.round(CANVAS_H * 0.04);   // 4% from top
 
-  const composited = await sharp(bgBuffer)
+  // Drop shadow SVG — ellipse beneath the product
+  const shadowY = productTop + productAreaH - 40;
+  const shadowSvg = Buffer.from(
+    `<svg width="${CANVAS_W}" height="${CANVAS_H}">
+      <defs>
+        <radialGradient id="sh" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stop-color="black" stop-opacity="0.45"/>
+          <stop offset="100%" stop-color="black" stop-opacity="0"/>
+        </radialGradient>
+      </defs>
+      <ellipse cx="${CANVAS_W / 2}" cy="${shadowY}" rx="${productAreaW * 0.42}" ry="60" fill="url(#sh)"/>
+    </svg>`
+  );
+
+  // Dark gradient footer (bottom 40%) for text legibility
+  const gradientSvg = Buffer.from(
+    `<svg width="${CANVAS_W}" height="${CANVAS_H}">
+      <defs>
+        <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="black" stop-opacity="0"/>
+          <stop offset="45%" stop-color="black" stop-opacity="0.72"/>
+          <stop offset="100%" stop-color="black" stop-opacity="0.92"/>
+        </linearGradient>
+      </defs>
+      <rect x="0" y="${Math.round(CANVAS_H * 0.60)}" width="${CANVAS_W}" height="${Math.round(CANVAS_H * 0.40)}" fill="url(#g)"/>
+    </svg>`
+  );
+
+  // Text overlay — headline + CTA + brand name
+  const hl      = (headline  ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const cta     = (ctaText   ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const brand   = (brandName ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+  const textSvg = Buffer.from(
+    `<svg width="${CANVAS_W}" height="${CANVAS_H}" xmlns="http://www.w3.org/2000/svg">
+      <style>
+        .hl  { font: bold 72px sans-serif; fill: white; }
+        .cta { font: bold 52px sans-serif; fill: #25D366; }
+        .br  { font: 38px sans-serif; fill: rgba(255,255,255,0.65); letter-spacing: 3; }
+      </style>
+      <!-- Headline — word-wrap via two lines max -->
+      <text x="${CANVAS_W / 2}" y="${Math.round(CANVAS_H * 0.72)}" text-anchor="middle" class="hl">${hl.slice(0, 28)}</text>
+      ${hl.length > 28 ? `<text x="${CANVAS_W / 2}" y="${Math.round(CANVAS_H * 0.72) + 88}" text-anchor="middle" class="hl">${hl.slice(28, 56)}</text>` : ""}
+      <!-- CTA pill -->
+      <rect x="${CANVAS_W / 2 - 240}" y="${Math.round(CANVAS_H * 0.82)}" width="480" height="90" rx="45" fill="#25D366"/>
+      <text x="${CANVAS_W / 2}" y="${Math.round(CANVAS_H * 0.82) + 62}" text-anchor="middle" class="cta">${cta}</text>
+      <!-- Brand name footer -->
+      <text x="${CANVAS_W / 2}" y="${Math.round(CANVAS_H * 0.95)}" text-anchor="middle" class="br">${brand.toUpperCase()}</text>
+    </svg>`
+  );
+
+  const final = await sharp(bgBuffer)
     .resize(CANVAS_W, CANVAS_H, { fit: "cover" })
-    .composite([{ input: resizedProduct, top, left, blend: "over" }])
-    .jpeg({ quality: 92 })
+    .composite([
+      { input: shadowSvg,     blend: "over" },
+      { input: resizedProduct, top: productTop, left: productLeft, blend: "over" },
+      { input: gradientSvg,   blend: "over" },
+      { input: textSvg,       blend: "over" },
+    ])
+    .jpeg({ quality: 93 })
     .toBuffer();
 
   const path = `ad-studio/enhanced/${Date.now()}.jpg`;
-  return uploadFileToStorage(composited, path, "image/jpeg");
+  return uploadFileToStorage(final, path, "image/jpeg");
 }
 
 // ── Replicate helper with 429 retry ──────────────────────────────────────────
@@ -364,7 +408,7 @@ Generate an ad for this product. Return JSON:
   const hashtags: string[] = analysis.hashtags ?? [];
 
   // Step 3: Remove bg → pro background → composite (product unchanged)
-  const enhancedImageUrl = await enhanceProductPhoto(imageUrl, backgroundPrompt);
+  const enhancedImageUrl = await enhanceProductPhoto(imageUrl, backgroundPrompt, headline, ctaText, brand.name);
 
   // Step 4: Save original to storage
   const originalPath = `ad-studio/${brandId}/${Date.now()}-original.jpg`;
