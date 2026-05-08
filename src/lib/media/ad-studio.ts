@@ -99,10 +99,7 @@ Return JSON:
       ? signals.map((s) => `${s.type}: ${s.title}`).join("; ")
       : "general Indian market trends";
 
-  // ── Step 4: Remove bg → generate pro background → composite ────────────────
-  const enhancedImageUrl = await enhanceProductPhoto(originalImageUrl, backgroundPrompt, headline, ctaText, brand.name);
-
-  // ── Step 5: Claude generates ad copy ────────────────────────────────────────
+  // ── Step 4: Claude generates ad copy ────────────────────────────────────────
   const copyResponse = await anthropic.messages.create({
     model: "claude-sonnet-4-6",
     max_tokens: 600,
@@ -135,6 +132,9 @@ Return JSON:
   const bodyText: string = copy.bodyText ?? `Check out our latest ${productName}. Quality you can trust.`;
   const ctaText: string = copy.ctaText ?? "Order Now";
   const hashtags: string[] = copy.hashtags ?? [];
+
+  // ── Step 5: Remove bg → generate pro background → composite ────────────────
+  const enhancedImageUrl = await enhanceProductPhoto(originalImageUrl, backgroundPrompt, headline, ctaText, brand.name);
 
   // ── Step 6: Create draft Post ────────────────────────────────────────────────
   const post = await prisma.post.create({
